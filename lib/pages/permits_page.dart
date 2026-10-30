@@ -110,6 +110,30 @@ class _PermitsPageState extends State<PermitsPage> {
     _load();
   }
 
+Future<void> _changeValidity(Map<String, dynamic> r) async {
+    final id = str(r['id']);
+    var history = <Map<String, dynamic>>[];
+    try {
+      history = await AdminService.permitChanges(id);
+    } catch (_) {}
+    if (!mounted) return;
+    final result = await showDialog<_ValidityResult>(
+      context: context,
+      builder: (_) => _ValidityDialog(
+        permitNo: str(r['permit_no']),
+        current: DateTime.tryParse(str(r['valid_until'])),
+        history: history,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() => _busyId = id);
+    final err = await AdminService.setValidity(id, result.date, result.reason);
+    if (!mounted) return;
+    setState(() => _busyId = null);
+    showSnack(context, err ?? 'Validity changed. It was recorded and the applicant was notified.');
+    _load();
+  }
+
   Widget _stickerPill(String s) {
     switch (s) {
       case 'ready':
@@ -173,6 +197,11 @@ class _PermitsPageState extends State<PermitsPage> {
             ],
           ),
           ?action,
+          OutlinedButton.icon(
+            onPressed: busy ? null : () => _changeValidity(r),
+            icon: const Icon(Icons.event_outlined, size: 18),
+            label: const Text('Change validity'),
+          ),
         ],
       ),
     );
@@ -192,6 +221,191 @@ class _PermitsPageState extends State<PermitsPage> {
       onSearch: (v) => setState(() => _query = v),
       searchHint: 'Search permit, plate, name or ID',
       children: [for (final r in _visible) _row(r)],
+    );
+  }
+}
+
+class _ValidityResult {
+  const _ValidityResult(this.date, this.reason);
+
+  final DateTime date;
+  final String reason;
+}
+
+/// Change a permit's "valid until" date. A reason is required, and the
+/// change is kept in the history (it cannot be deleted).
+class _ValidityDialog extends StatefulWidget {
+  const _ValidityDialog({
+    required this.permitNo,
+    required this.current,
+    required this.history,
+  });
+
+  final String permitNo;
+  final DateTime? current;
+  final List<Map<String, dynamic>> history;
+
+  @override
+  State<_ValidityDialog> createState() => _ValidityDialogState();
+}
+
+class _ValidityDialogState extends State<_ValidityDialog> {
+  DateTime? _date;
+  final TextEditingController _reason = TextEditingController();
+  String? _error;
+
+  DateTime get _today {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  DateTime get _base => widget.current ?? _today;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  String _fmt(DateTime d) => fmtDate(
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}',
+        time: false,
+      );
+
+  Future<void> _pick() async {
+    final first = _today.subtract(const Duration(days: 365));
+    final last = _today.add(const Duration(days: 730));
+    var init = _date ?? _base;
+    if (init.isBefore(first)) init = first;
+    if (init.isAfter(last)) init = last;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: init,
+      firstDate: first,
+      lastDate: last,
+      helpText: 'New "valid until" date',
+    );
+    if (picked != null) setState(() => _date = picked);
+  }
+
+  void _save() {
+    final reason = _reason.text.trim();
+    if (_date == null) {
+      setState(() => _error = 'Choose the new date.');
+      return;
+    }
+    if (reason.length < 5) {
+      setState(() => _error = 'Write the reason (at least 5 characters).');
+      return;
+    }
+    Navigator.pop(context, _ValidityResult(_date!, reason));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final quick = <(String, DateTime)>[
+      ('+1 month', DateTime(_base.year, _base.month + 1, _base.day)),
+      ('+6 months', DateTime(_base.year, _base.month + 6, _base.day)),
+      ('Expire now', _today.subtract(const Duration(days: 1))),
+    ];
+    return AlertDialog(
+      title: Text('Change validity of ${widget.permitNo}'),
+      content: SizedBox(
+        width: 540,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Currently valid until ${widget.current == null ? '-' : _fmt(widget.current!)}.',
+                style: const TextStyle(color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  for (final q in quick)
+                    ActionChip(label: Text(q.$1), onPressed: () => setState(() => _date = q.$2)),
+                  OutlinedButton.icon(
+                    onPressed: _pick,
+                    icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                    label: const Text('Pick a date'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _date == null ? 'New date: not chosen yet' : 'New date: ${_fmt(_date!)}',
+                style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.navy),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _reason,
+                maxLines: 2,
+                maxLength: 200,
+                decoration: const InputDecoration(
+                  labelText: 'Reason (required)',
+                  hintText: 'e.g., Extended because of late enrollment.',
+                ),
+              ),
+              const Text(
+                'This change is recorded with your account and cannot be deleted. The applicant will be notified.',
+                style: TextStyle(fontSize: 12, color: AppColors.textHint),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!, style: const TextStyle(color: AppColors.error)),
+              ],
+              const SizedBox(height: 18),
+              const Text(
+                'HISTORY',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color: AppColors.goldDark,
+                ),
+              ),
+              const SizedBox(height: 6),
+              if (widget.history.isEmpty)
+                const Text('No changes yet.', style: TextStyle(color: AppColors.textMuted))
+              else
+                for (final h in widget.history)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${fmtDate(h['created_at'])}  |  ${str(asOne(h['admin'])['email'])}',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textHint),
+                        ),
+                        Text(
+                          'From ${fmtDate(h['old_valid_until'], time: false)} to ${fmtDate(h['new_valid_until'], time: false)}',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        Text('Reason: ${str(h['reason'])}'),
+                      ],
+                    ),
+                  ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: _save, child: const Text('Save change')),
+      ],
     );
   }
 }

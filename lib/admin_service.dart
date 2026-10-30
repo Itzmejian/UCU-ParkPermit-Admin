@@ -261,6 +261,27 @@ class AdminService {
         await _c.rpc('admin_reply_ticket', params: {'p_id': id, 'p_reply': reply});
       });
 
+static String _sqlDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  static Future<String?> setValidity(String permitId, DateTime until, String reason) => _run(() async {
+        await _c.rpc('admin_set_validity', params: {
+          'p_permit_id': permitId,
+          'p_until': _sqlDate(until),
+          'p_reason': reason,
+        });
+      });
+
+  /// Changes made to a permit's validity, newest first.
+  static Future<List<Map<String, dynamic>>> permitChanges(String permitId) async {
+    final rows = await _c
+        .from('permit_changes')
+        .select('*, admin:profiles!permit_changes_changed_by_fkey(full_name, email)')
+        .eq('permit_id', permitId)
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(rows);
+  }
+
   static Future<String?> closeTicket(String id) => _run(() async {
         await _c.rpc('admin_close_ticket', params: {'p_id': id});
       });
