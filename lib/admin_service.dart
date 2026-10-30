@@ -59,6 +59,19 @@ class AdminService {
     } catch (_) {}
   }
 
+  static Future<String?> _run(Future<void> Function() action) async {
+    try {
+      await action();
+      return null;
+    } catch (e) {
+      return friendly(e);
+    }
+  }
+
+  static Future<String> documentUrl(String path) {
+    return _c.storage.from('documents').createSignedUrl(path, 600);
+  }
+
   // ---------- applications ----------
 
   static const String _listCols =
@@ -95,51 +108,6 @@ class AdminService {
     return List<Map<String, dynamic>>.from(rows);
   }
 
-  static Future<String> documentUrl(String path) {
-    return _c.storage.from('documents').createSignedUrl(path, 600);
-  }
-
-  // ---------- dashboard ----------
-
-  static Future<int> _count(String table, String column, Object value) async {
-    final rows = await _c.from(table).select('id').eq(column, value);
-    return (rows as List).length;
-  }
-
-  static Future<Map<String, int>> dashboardCounts() async {
-    final r = await Future.wait<int>([
-      _count('applications', 'status', 'pending'),
-      _count('applications', 'status', 'under_review'),
-      _count('applications', 'status', 'appeal_review'),
-      _count('permits', 'sticker_status', 'preparing'),
-      _count('permits', 'sticker_status', 'ready'),
-      _count('vehicles', 'pending_verification', true),
-      _count('sticker_replacements', 'status', 'requested'),
-      _count('support_tickets', 'status', 'open'),
-    ]);
-    return {
-      'pending': r[0],
-      'under_review': r[1],
-      'appeal_review': r[2],
-      'preparing': r[3],
-      'ready': r[4],
-      'plate_changes': r[5],
-      'replacements': r[6],
-      'tickets': r[7],
-    };
-  }
-
-  // ---------- actions ----------
-
-  static Future<String?> _run(Future<void> Function() action) async {
-    try {
-      await action();
-      return null;
-    } catch (e) {
-      return friendly(e);
-    }
-  }
-
   static Future<String?> startReview(String appId) => _run(() async {
         await _c.rpc('admin_start_review', params: {'p_app_id': appId});
       });
@@ -171,5 +139,129 @@ class AdminService {
           'p_flags': flags,
           'p_note': note,
         });
+      });
+
+  // ---------- dashboard ----------
+
+  static Future<int> _count(String table, String column, Object value) async {
+    final rows = await _c.from(table).select('id').eq(column, value);
+    return (rows as List).length;
+  }
+
+  static Future<Map<String, int>> dashboardCounts() async {
+    final r = await Future.wait<int>([
+      _count('applications', 'status', 'pending'),
+      _count('applications', 'status', 'under_review'),
+      _count('applications', 'status', 'appeal_review'),
+      _count('permits', 'sticker_status', 'preparing'),
+      _count('permits', 'sticker_status', 'ready'),
+      _count('vehicles', 'pending_verification', true),
+      _count('sticker_replacements', 'status', 'requested'),
+      _count('support_tickets', 'status', 'open'),
+    ]);
+    return {
+      'pending': r[0],
+      'under_review': r[1],
+      'appeal_review': r[2],
+      'preparing': r[3],
+      'ready': r[4],
+      'plate_changes': r[5],
+      'replacements': r[6],
+      'tickets': r[7],
+    };
+  }
+
+  // ---------- permits and stickers ----------
+
+  static Future<List<Map<String, dynamic>>> permits() async {
+    final rows = await _c
+        .from('permits')
+        .select(
+          '*, vehicle:vehicles(plate_number, make_model, vehicle_type), '
+          'owner:profiles!permits_owner_id_fkey(full_name, role, id_number), '
+          'zone:parking_zones(code, name)',
+        )
+        .order('created_at', ascending: false)
+        .limit(1000);
+    return List<Map<String, dynamic>>.from(rows);
+  }
+
+  static Future<String?> setSticker(String permitId, String state) => _run(() async {
+        await _c.rpc('admin_set_sticker', params: {
+          'p_permit_id': permitId,
+          'p_state': state,
+        });
+      });
+
+  // ---------- plate changes ----------
+
+  static Future<List<Map<String, dynamic>>> plateChanges() async {
+    final rows = await _c
+        .from('vehicles')
+        .select('*, owner:profiles!vehicles_owner_id_fkey(full_name, role, id_number, email)')
+        .eq('pending_verification', true)
+        .eq('active', true)
+        .order('updated_at', ascending: false);
+    return List<Map<String, dynamic>>.from(rows);
+  }
+
+  /// The newest OR/CR uploaded for this vehicle, or null.
+  static Future<String?> latestOrcrPath(String vehicleId) async {
+    final apps = await _c.from('applications').select('id').eq('vehicle_id', vehicleId);
+    final ids = [for (final a in List<Map<String, dynamic>>.from(apps)) a['id']];
+    if (ids.isEmpty) return null;
+    final docs = await _c
+        .from('documents')
+        .select('file_path')
+        .inFilter('application_id', ids)
+        .eq('kind', 'orcr')
+        .order('created_at', ascending: false)
+        .limit(1);
+    final list = List<Map<String, dynamic>>.from(docs);
+    return list.isEmpty ? null : list.first['file_path']?.toString();
+  }
+
+  static Future<String?> verifyVehicle(String vehicleId) => _run(() async {
+        await _c.rpc('admin_verify_vehicle', params: {'p_vehicle_id': vehicleId});
+      });
+
+  // ---------- sticker replacements ----------
+
+  static Future<List<Map<String, dynamic>>> replacements() async {
+    final rows = await _c
+        .from('sticker_replacements')
+        .select(
+          '*, permit:permits(permit_no, sticker_status, vehicle:vehicles(plate_number, make_model)), '
+          'owner:profiles!sticker_replacements_owner_id_fkey(full_name, role, id_number)',
+        )
+        .order('created_at', ascending: false)
+        .limit(500);
+    return List<Map<String, dynamic>>.from(rows);
+  }
+
+  static Future<String?> replacementDecision(String id, bool approve) => _run(() async {
+        await _c.rpc('admin_replacement_decision', params: {
+          'p_id': id,
+          'p_approve': approve,
+        });
+      });
+
+  // ---------- support tickets ----------
+
+  static Future<List<Map<String, dynamic>>> tickets() async {
+    final rows = await _c
+        .from('support_tickets')
+        .select('*, user:profiles!support_tickets_user_id_fkey(full_name, email, role)')
+        .order('created_at', ascending: false)
+        .limit(500);
+    return List<Map<String, dynamic>>.from(rows);
+  }
+
+  static Future<String?> replyTicket(String id, String reply) => _run(() async {
+        await _c.rpc('admin_reply_ticket', params: {'p_id': id, 'p_reply': reply});
+      });
+
+  static Future<String?> closeTicket(String id) => _run(() async {
+        await _c.rpc('admin_close_ticket', params: {'p_id': id});
       });
 }

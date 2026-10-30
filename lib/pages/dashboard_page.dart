@@ -5,9 +5,10 @@ import 'application_detail_page.dart';
 import 'applications_page.dart';
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key, required this.onOpenApplications});
+  const DashboardPage({super.key, required this.onOpen});
 
-  final void Function(String? status) onOpenApplications;
+  /// Opens a page of the menu (by index) with a filter.
+  final void Function(int page, String? filter) onOpen;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -51,7 +52,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  Future<void> _open(String id) async {
+  Future<void> _openApp(String id) async {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => ApplicationDetailPage(id: id)),
@@ -59,7 +60,7 @@ class _DashboardPageState extends State<DashboardPage> {
     _load();
   }
 
-  Widget _stat(String label, String key, IconData icon, Color color, {VoidCallback? onTap}) {
+  Widget _stat(String label, String key, IconData icon, Color color, int page, String? filter) {
     return SizedBox(
       width: 250,
       child: Material(
@@ -67,7 +68,7 @@ class _DashboardPageState extends State<DashboardPage> {
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
+          onTap: () => widget.onOpen(page, filter),
           child: Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
@@ -132,24 +133,21 @@ class _DashboardPageState extends State<DashboardPage> {
               spacing: 16,
               runSpacing: 16,
               children: [
-                _stat('New applications', 'pending', Icons.inbox_outlined, AppColors.goldDark,
-                    onTap: () => widget.onOpenApplications('pending')),
-                _stat('Under review', 'under_review', Icons.manage_search, AppColors.navy,
-                    onTap: () => widget.onOpenApplications('under_review')),
-                _stat('Appeals to review', 'appeal_review', Icons.gavel_outlined, AppColors.error,
-                    onTap: () => widget.onOpenApplications('appeal_review')),
-                _stat('Stickers to prepare', 'preparing', Icons.print_outlined, AppColors.navy),
-                _stat('Stickers ready for pickup', 'ready', Icons.inventory_2_outlined, AppColors.success),
-                _stat('Plate changes to verify', 'plate_changes', Icons.pin_outlined, AppColors.goldDark),
-                _stat('Replacement requests', 'replacements', Icons.sync_outlined, AppColors.goldDark),
-                _stat('Open support tickets', 'tickets', Icons.support_agent_outlined, AppColors.navy),
+                _stat('New applications', 'pending', Icons.inbox_outlined, AppColors.goldDark, 1, 'pending'),
+                _stat('Under review', 'under_review', Icons.manage_search, AppColors.navy, 1, 'under_review'),
+                _stat('Appeals to review', 'appeal_review', Icons.gavel_outlined, AppColors.error, 1, 'appeal_review'),
+                _stat('Stickers to prepare', 'preparing', Icons.print_outlined, AppColors.navy, 2, 'preparing'),
+                _stat('Stickers ready for pickup', 'ready', Icons.inventory_2_outlined, AppColors.success, 2, 'ready'),
+                _stat('Plate changes to verify', 'plate_changes', Icons.pin_outlined, AppColors.goldDark, 3, null),
+                _stat('Replacement requests', 'replacements', Icons.sync_outlined, AppColors.goldDark, 4, 'requested'),
+                _stat('Open support tickets', 'tickets', Icons.support_agent_outlined, AppColors.navy, 5, 'open'),
               ],
             ),
             const SizedBox(height: 24),
             SectionCard(
               title: 'Needs your action',
               trailing: TextButton(
-                onPressed: () => widget.onOpenApplications(null),
+                onPressed: () => widget.onOpen(1, null),
                 child: const Text('See all applications'),
               ),
               children: [
@@ -162,7 +160,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   for (final a in _todo)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: ApplicationRow(app: a, onTap: () => _open(str(a['id']))),
+                      child: ApplicationRow(app: a, onTap: () => _openApp(str(a['id']))),
                     ),
               ],
             ),
