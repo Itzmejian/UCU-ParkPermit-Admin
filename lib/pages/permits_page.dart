@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../admin_service.dart';
 import '../ui.dart';
 import 'common.dart';
+import 'sticker_page.dart';
 
 class PermitsPage extends StatefulWidget {
   const PermitsPage({super.key, this.initialFilter});
@@ -201,6 +202,14 @@ Future<void> _changeValidity(Map<String, dynamic> r) async {
             onPressed: busy ? null : () => _changeValidity(r),
             icon: const Icon(Icons.event_outlined, size: 18),
             label: const Text('Change validity'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => StickerPage(permit: r)),
+            ),
+            icon: const Icon(Icons.qr_code_2, size: 18),
+            label: const Text('Sticker QR'),
           ),
         ],
       ),

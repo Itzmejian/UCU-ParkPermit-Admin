@@ -6,6 +6,7 @@ import 'dashboard_page.dart';
 import 'permits_page.dart';
 import 'plate_changes_page.dart';
 import 'replacements_page.dart';
+import 'scan_log_page.dart';
 import 'support_page.dart';
 
 class ShellPage extends StatefulWidget {
@@ -29,6 +30,7 @@ class _ShellPageState extends State<ShellPage> {
     ('Plate changes', Icons.pin_outlined, Icons.pin),
     ('Replacements', Icons.sync_outlined, Icons.sync),
     ('Support', Icons.support_agent_outlined, Icons.support_agent),
+    ('Gate scans', Icons.qr_code_scanner_outlined, Icons.qr_code_scanner),
   ];
 
   /// Opens a page with a filter (used by the Dashboard cards).
@@ -56,7 +58,8 @@ class _ShellPageState extends State<ShellPage> {
       2 => PermitsPage(key: key, initialFilter: _filters[2]),
       3 => PlateChangesPage(key: key),
       4 => ReplacementsPage(key: key, initialFilter: _filters[4]),
-      _ => SupportPage(key: key, initialFilter: _filters[5]),
+      5 => SupportPage(key: key, initialFilter: _filters[5]),
+      _ => ScanLogPage(key: key),
     };
   }
 

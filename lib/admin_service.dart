@@ -282,6 +282,16 @@ static String _sqlDate(DateTime d) =>
     return List<Map<String, dynamic>>.from(rows);
   }
 
+/// Every sticker check made by a guard, newest first.
+  static Future<List<Map<String, dynamic>>> gateScans() async {
+    final rows = await _c
+        .from('gate_scans')
+        .select('*, permit:permits(permit_no, vehicle:vehicles(plate_number, make_model))')
+        .order('created_at', ascending: false)
+        .limit(500);
+    return List<Map<String, dynamic>>.from(rows);
+  }
+
   static Future<String?> closeTicket(String id) => _run(() async {
         await _c.rpc('admin_close_ticket', params: {'p_id': id});
       });
