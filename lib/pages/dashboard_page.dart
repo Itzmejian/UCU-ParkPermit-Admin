@@ -154,11 +154,16 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  double get _cardWidth {
+    final w = MediaQuery.sizeOf(context).width;
+    return w < 600 ? w - 32 : 262;
+  }
+
   Widget _stat(String label, String key, IconData icon, Color color, int page, String? filter) {
     final n = _counts[key] ?? 0;
     final active = n > 0;
     return SizedBox(
-      width: 262,
+      width: _cardWidth,
       child: Material(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -214,7 +219,7 @@ class _DashboardPageState extends State<DashboardPage> {
         return RefreshIndicator(
           onRefresh: _load,
           child: ListView(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(pagePadding(context)),
             children: [
               _banner(c.maxWidth >= 800),
               const SizedBox(height: 24),

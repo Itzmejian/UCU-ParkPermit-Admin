@@ -221,7 +221,7 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
         .join(', ');
 
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(pagePadding(context)),
       children: [
         Center(
           child: ConstrainedBox(

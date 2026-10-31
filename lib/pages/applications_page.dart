@@ -75,7 +75,7 @@ class _ApplicationsPageState extends State<ApplicationsPage> {
   Widget build(BuildContext context) {
     final rows = _visible;
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(pagePadding(context)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -86,7 +86,7 @@ class _ApplicationsPageState extends State<ApplicationsPage> {
             children: [
               const PageTitle('Applications'),
               SizedBox(
-                width: 320,
+                width: searchWidth(context),
                 child: TextField(
                   onChanged: (v) => setState(() => _query = v),
                   decoration: const InputDecoration(

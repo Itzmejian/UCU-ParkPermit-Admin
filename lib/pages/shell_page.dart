@@ -388,7 +388,7 @@ class _ShellPageState extends State<ShellPage> {
     return LayoutBuilder(
       builder: (context, c) {
         final body = _page(_index);
-        if (c.maxWidth >= 900) {
+        if (c.maxWidth >= 700) {
           return Scaffold(
             body: Row(
               children: [

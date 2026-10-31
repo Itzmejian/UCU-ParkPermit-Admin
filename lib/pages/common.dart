@@ -88,7 +88,7 @@ class ListPageFrame extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(pagePadding(context)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -100,7 +100,7 @@ class ListPageFrame extends StatelessWidget {
               PageTitle(title),
               if (onSearch != null)
                 SizedBox(
-                  width: 320,
+                  width: searchWidth(context),
                   child: TextField(
                     onChanged: onSearch,
                     decoration: InputDecoration(

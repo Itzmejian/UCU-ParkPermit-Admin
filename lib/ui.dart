@@ -283,6 +283,16 @@ class SectionCard extends StatelessWidget {
   }
 }
 
+/// Less space around pages on phones.
+double pagePadding(BuildContext context) =>
+    MediaQuery.sizeOf(context).width < 600 ? 16 : 24;
+
+/// A search box that never gets wider than the screen.
+double searchWidth(BuildContext context) {
+  final w = MediaQuery.sizeOf(context).width - 64;
+  return w < 320 ? w : 320;
+}
+
 class InfoRow extends StatelessWidget {
   const InfoRow(this.label, this.value, {super.key, this.mono = false});
 
@@ -297,25 +307,32 @@ class InfoRow extends StatelessWidget {
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AppColors.inputFill)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 160,
-            child: Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textHint)),
-          ),
-          Expanded(
-            child: SelectableText(
-              value.trim().isEmpty ? '-' : value,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textDark,
-                fontFamily: mono ? 'monospace' : null,
-              ),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final labelText = Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textHint));
+          final valueText = SelectableText(
+            value.trim().isEmpty ? '-' : value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+              fontFamily: mono ? 'monospace' : null,
             ),
-          ),
-        ],
+          );
+          if (c.maxWidth < 420) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [labelText, const SizedBox(height: 2), valueText],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 160, child: labelText),
+              Expanded(child: valueText),
+            ],
+          );
+        },
       ),
     );
   }
