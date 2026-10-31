@@ -5,6 +5,7 @@ import 'applications_page.dart';
 import 'dashboard_page.dart';
 import 'permits_page.dart';
 import 'plate_changes_page.dart';
+import 'privacy.dart';
 import 'replacements_page.dart';
 import 'scan_log_page.dart';
 import 'support_page.dart';
@@ -38,6 +39,106 @@ class _ShellPageState extends State<ShellPage> {
   void initState() {
     super.initState();
     _loadCounts();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !privacyAcknowledged()) showPrivacyDialog(context, requireAck: true);
+    });
+  }
+
+  Widget _accent() {
+    return Container(
+      height: 4,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(colors: [AppColors.ucuGreen, AppColors.gold, AppColors.navy]),
+      ),
+    );
+  }
+
+  Widget _topBar() {
+    const crumb = TextStyle(fontSize: 13, color: AppColors.textHint);
+    const arrow = Padding(
+      padding: EdgeInsets.symmetric(horizontal: 6),
+      child: Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
+    );
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: Row(
+        children: [
+          Flexible(
+            child: Row(
+              children: [
+                const Flexible(
+                  child: Text('Urdaneta City University', style: crumb, overflow: TextOverflow.ellipsis),
+                ),
+                arrow,
+                const Text('Security Office', style: crumb),
+                arrow,
+                Text(
+                  _dests[_index].$1,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.navy),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.textHint),
+          const SizedBox(width: 6),
+          Text(
+            fmtDate(DateTime.now().toIso8601String(), time: false),
+            style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _footer() {
+    const small = TextStyle(fontSize: 11.5, color: AppColors.textHint);
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      child: Wrap(
+        spacing: 18,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AdminLogo(size: 22),
+              SizedBox(width: 8),
+              Text(
+                'URDANETA CITY UNIVERSITY',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: AppColors.navy),
+              ),
+            ],
+          ),
+          const Text('Owned and operated by the City Government of Urdaneta', style: small),
+          InkWell(
+            onTap: () => showPrivacyDialog(context),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.privacy_tip_outlined, size: 14, color: AppColors.ucuGreen),
+                SizedBox(width: 4),
+                Text(
+                  'Data Privacy Act of 2012 (RA 10173)',
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.ucuGreen),
+                ),
+              ],
+            ),
+          ),
+          Text('© ${DateTime.now().year} Urdaneta City University', style: small),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadCounts() async {
@@ -292,7 +393,16 @@ class _ShellPageState extends State<ShellPage> {
             body: Row(
               children: [
                 _sidebar(compact: c.maxWidth < 1200),
-                Expanded(child: body),
+                Expanded(
+                  child: Column(
+                    children: [
+                      _accent(),
+                      _topBar(),
+                      Expanded(child: body),
+                      _footer(),
+                    ],
+                  ),
+                ),
               ],
             ),
           );
