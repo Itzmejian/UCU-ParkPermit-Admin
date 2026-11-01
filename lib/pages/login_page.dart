@@ -125,6 +125,62 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+/// On phones: a navy header with the seal, like the desktop panel.
+  Widget _mobileHeader() {
+    return Container(
+      width: double.infinity,
+      clipBehavior: Clip.antiAlias,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.navy, AppColors.navyDark],
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(child: CustomPaint(painter: _RaysPainter())),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
+            child: Row(
+              children: [
+                Container(
+                  width: 66,
+                  height: 66,
+                  padding: const EdgeInsets.all(7),
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  child: const AdminLogo(size: 52),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'URDANETA CITY UNIVERSITY',
+                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 1, color: AppColors.gold),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'ParkPermit',
+                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white),
+                      ),
+                      Text(
+                        'Security Office Portal',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.blueSoft),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _form(bool showLogo) {
     return Center(
       child: SingleChildScrollView(
@@ -277,7 +333,12 @@ class _LoginPageState extends State<LoginPage> {
                     ],
                   );
                 }
-                return _form(true);
+                return Column(
+                  children: [
+                    _mobileHeader(),
+                    Expanded(child: _form(false)),
+                  ],
+                );
               },
             ),
           ),
