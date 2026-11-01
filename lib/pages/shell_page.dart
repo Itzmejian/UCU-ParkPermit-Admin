@@ -9,6 +9,7 @@ import 'privacy.dart';
 import 'replacements_page.dart';
 import 'scan_log_page.dart';
 import 'support_page.dart';
+import 'users_page.dart';
 
 class ShellPage extends StatefulWidget {
   const ShellPage({super.key, required this.onLogout});
@@ -33,6 +34,7 @@ class _ShellPageState extends State<ShellPage> {
     ('Replacements', Icons.sync_outlined, Icons.sync),
     ('Support', Icons.support_agent_outlined, Icons.support_agent),
     ('Gate scans', Icons.qr_code_scanner_outlined, Icons.qr_code_scanner),
+    ('Users', Icons.people_outline, Icons.people),
   ];
 
   @override
@@ -187,7 +189,8 @@ class _ShellPageState extends State<ShellPage> {
       3 => PlateChangesPage(key: key),
       4 => ReplacementsPage(key: key, initialFilter: _filters[4]),
       5 => SupportPage(key: key, initialFilter: _filters[5]),
-      _ => ScanLogPage(key: key),
+      6 => ScanLogPage(key: key),
+      _ => UsersPage(key: key),
     };
   }
 

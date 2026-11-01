@@ -16,6 +16,8 @@ class AdminService {
     if (m.contains('NOTHING_FLAGGED')) return 'Flag at least one document or write a note.';
     if (m.contains('NOT_FOUND')) return 'Record not found. Refresh the page.';
     if (m.contains('BAD_INPUT')) return 'Please check what you entered.';
+    if (m.contains('PROTECTED_ACCOUNT')) return 'Admin and guard accounts cannot be removed here.';
+    if (m.contains('CONFIRM_MISMATCH')) return 'The ID number you typed does not match.';
     if (m.toLowerCase().contains('failed to fetch') ||
         m.toLowerCase().contains('socket')) {
       return 'No internet connection. Please try again.';
@@ -290,6 +292,72 @@ static String _sqlDate(DateTime d) =>
         .order('created_at', ascending: false)
         .limit(500);
     return List<Map<String, dynamic>>.from(rows);
+  }
+
+// ---------- users ----------
+
+  /// Students and employees (not guards, not this admin).
+  static Future<List<Map<String, dynamic>>> users() async {
+    final rows = await _c
+        .from('profiles')
+        .select('*, vehicles(id, plate_number, active), permits(id, valid_until, sticker_status)')
+        .order('full_name')
+        .limit(3000);
+    final guards = await _c.from('guards').select('user_id');
+    final skip = <dynamic>{
+      for (final g in List<Map<String, dynamic>>.from(guards)) g['user_id'],
+      _c.auth.currentUser?.id,
+    };
+    return [
+      for (final r in List<Map<String, dynamic>>.from(rows))
+        if (!skip.contains(r['id'])) r,
+    ];
+  }
+
+  static Future<Map<String, dynamic>> user(String id) async {
+    final row = await _c
+        .from('profiles')
+        .select(
+          '*, vehicles(*), permits(*), '
+          'applications!applications_applicant_id_fkey(id, reference_no, kind, status, submitted_at, vehicle:vehicles(plate_number))',
+        )
+        .eq('id', id)
+        .single();
+    return Map<String, dynamic>.from(row);
+  }
+
+  static Future<({String? date, String? error})> scheduleRemoval(String id, int days, String reason) async {
+    try {
+      final r = await _c.rpc('admin_schedule_removal', params: {
+        'p_user': id,
+        'p_days': days,
+        'p_reason': reason,
+      });
+      return (date: r?.toString(), error: null);
+    } catch (e) {
+      return (date: null, error: friendly(e));
+    }
+  }
+
+  static Future<String?> cancelRemoval(String id) => _run(() async {
+        await _c.rpc('admin_cancel_removal', params: {'p_user': id});
+      });
+
+  /// Deletes the account and everything in it, then the uploaded files.
+  static Future<String?> deleteUser(String id, String confirm) async {
+    try {
+      await _c.rpc('admin_delete_user', params: {'p_user': id, 'p_confirm': confirm});
+    } catch (e) {
+      return friendly(e);
+    }
+    try {
+      final files = await _c.storage.from('documents').list(path: id);
+      final paths = [for (final f in files) '$id/${f.name}'];
+      if (paths.isNotEmpty) await _c.storage.from('documents').remove(paths);
+    } catch (_) {
+      // The account is already deleted; leftover files can be removed in Supabase Storage.
+    }
+    return null;
   }
 
   static Future<String?> closeTicket(String id) => _run(() async {
