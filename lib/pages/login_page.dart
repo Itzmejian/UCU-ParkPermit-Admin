@@ -182,7 +182,8 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _form(bool showLogo) {
-    return Center(
+    return Align(
+      alignment: MediaQuery.sizeOf(context).width >= 900 ? Alignment.center : Alignment.topCenter,
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(28),
         child: ConstrainedBox(
@@ -196,11 +197,13 @@ class _LoginPageState extends State<LoginPage> {
               ],
               const Text(
                 'Welcome back',
+                textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.navy),
               ),
               const SizedBox(height: 6),
               const Text(
                 'Log in with your Security Office account.',
+                textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: AppColors.textMuted),
               ),
               const SizedBox(height: 26),
