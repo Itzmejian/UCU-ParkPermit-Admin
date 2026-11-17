@@ -445,6 +445,29 @@ static String _sqlDate(DateTime d) =>
     }
   }
 
+  static Future<String?> verifyResetCode(String address, String code) async {
+    try {
+      await _c.auth.verifyOTP(type: OtpType.recovery, email: address, token: code);
+      return null;
+    } on AuthException catch (e) {
+      return _authMsg(e);
+    } catch (_) {
+      return 'No internet connection. Please try again.';
+    }
+  }
+
+  static Future<String?> setNewPassword(String next) async {
+    try {
+      await _c.auth.updateUser(UserAttributes(password: next));
+      await signOut();
+      return null;
+    } on AuthException catch (e) {
+      return _authMsg(e);
+    } catch (_) {
+      return 'No internet connection. Please try again.';
+    }
+  }
+
   static Future<String?> resetWithCode(String address, String code, String next) async {
     try {
       await _c.auth.verifyOTP(type: OtpType.recovery, email: address, token: code);

@@ -391,7 +391,7 @@ class _RaysPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Forgot password: a 6-digit code is sent to the admin's email.
+/// Forgot password: email, then the 6-digit code, then a new password.
 class _ForgotDialog extends StatefulWidget {
   const _ForgotDialog({required this.email});
 
@@ -406,8 +406,9 @@ class _ForgotDialogState extends State<_ForgotDialog> {
   final _code = TextEditingController();
   final _pw = TextEditingController();
   final _pw2 = TextEditingController();
-  bool _sent = false;
+  int _step = 0; // 0 = email, 1 = code, 2 = new password
   bool _busy = false;
+  bool _hide = true;
   String? _error;
 
   @override
@@ -430,19 +431,38 @@ class _ForgotDialogState extends State<_ForgotDialog> {
     setState(() {
       _busy = false;
       _error = err;
-      _sent = err == null;
+      if (err == null) {
+        _step = 1;
+        _code.clear();
+      }
     });
   }
 
-  Future<void> _reset() async {
-    if (!RegExp(r'^\d{6}$').hasMatch(_code.text.trim())) return setState(() => _error = 'Enter the 6-digit code.');
+  Future<void> _verify() async {
+    if (!RegExp(r'^\d{6}$').hasMatch(_code.text.trim())) {
+      return setState(() => _error = 'Enter the 6-digit code.');
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final err = await AdminService.verifyResetCode(_email.text.trim(), _code.text.trim());
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = err;
+      if (err == null) _step = 2;
+    });
+  }
+
+  Future<void> _save() async {
     if (_pw.text.length < 8) return setState(() => _error = 'The new password needs at least 8 characters.');
     if (_pw.text != _pw2.text) return setState(() => _error = 'The new passwords do not match.');
     setState(() {
       _busy = true;
       _error = null;
     });
-    final err = await AdminService.resetWithCode(_email.text.trim(), _code.text.trim(), _pw.text);
+    final err = await AdminService.setNewPassword(_pw.text);
     if (!mounted) return;
     if (err == null) {
       Navigator.pop(context, true);
@@ -454,45 +474,83 @@ class _ForgotDialogState extends State<_ForgotDialog> {
     });
   }
 
+  Future<void> _cancel() async {
+    // After the code is verified the user is logged in, so log out again.
+    if (_step == 2) await AdminService.signOut();
+    if (mounted) Navigator.pop(context);
+  }
+
+  String get _title => switch (_step) {
+        0 => 'Forgot password',
+        1 => 'Enter the code',
+        _ => 'Create a new password',
+      };
+
+  String get _text => switch (_step) {
+        0 => 'Enter your admin email. We will send a 6-digit code to reset your password.',
+        1 => 'We sent a 6-digit code to ${_email.text.trim()}. Check your inbox and spam folder.',
+        _ => 'Your code is verified. Choose a new password for your admin account.',
+      };
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(_sent ? 'Enter the code' : 'Forgot password'),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'STEP ${_step + 1} OF 3',
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: AppColors.textHint),
+          ),
+          const SizedBox(height: 4),
+          Text(_title),
+        ],
+      ),
       content: SizedBox(
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              _sent
-                  ? 'We sent a 6-digit code to ${_email.text.trim()}. Enter it with your new password.'
-                  : 'Enter your admin email. We will send a 6-digit code to reset your password.',
-              style: const TextStyle(color: AppColors.textMuted),
-            ),
+            Text(_text, style: const TextStyle(color: AppColors.textMuted)),
             const SizedBox(height: 14),
-            if (!_sent)
+            if (_step == 0)
               TextField(
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
+                onSubmitted: (_) => _send(),
                 decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.mail_outline)),
+              )
+            else if (_step == 1)
+              TextField(
+                controller: _code,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                onSubmitted: (_) => _verify(),
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: 8),
+                decoration: const InputDecoration(labelText: '6-digit code', counterText: ''),
               )
             else ...[
               TextField(
-                controller: _code,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                decoration: const InputDecoration(labelText: '6-digit code', prefixIcon: Icon(Icons.pin_outlined)),
-              ),
-              TextField(
                 controller: _pw,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'New password', prefixIcon: Icon(Icons.lock_outline)),
+                autofocus: true,
+                obscureText: _hide,
+                decoration: InputDecoration(
+                  labelText: 'New password (at least 8 characters)',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(_hide ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                    onPressed: () => setState(() => _hide = !_hide),
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _pw2,
-                obscureText: true,
+                obscureText: _hide,
+                onSubmitted: (_) => _save(),
                 decoration: const InputDecoration(labelText: 'Confirm new password', prefixIcon: Icon(Icons.lock_outline)),
               ),
             ],
@@ -500,15 +558,19 @@ class _ForgotDialogState extends State<_ForgotDialog> {
               const SizedBox(height: 12),
               Text(_error!, style: const TextStyle(color: AppColors.error)),
             ],
+            if (_busy) ...[
+              const SizedBox(height: 12),
+              const LinearProgressIndicator(),
+            ],
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancel')),
-        if (_sent) TextButton(onPressed: _busy ? null : _send, child: const Text('Resend code')),
+        TextButton(onPressed: _busy ? null : _cancel, child: const Text('Cancel')),
+        if (_step == 1) TextButton(onPressed: _busy ? null : _send, child: const Text('Resend code')),
         FilledButton(
-          onPressed: _busy ? null : (_sent ? _reset : _send),
-          child: Text(_sent ? 'Reset Password' : 'Send Code'),
+          onPressed: _busy ? null : switch (_step) { 0 => _send, 1 => _verify, _ => _save },
+          child: Text(switch (_step) { 0 => 'Send Code', 1 => 'Verify Code', _ => 'Save New Password' }),
         ),
       ],
     );
