@@ -48,6 +48,19 @@ class _LoginPageState extends State<LoginPage> {
     widget.onLoggedIn();
   }
 
+  Future<void> _forgot() async {
+    final done = await showDialog<bool>(
+      context: context,
+      builder: (_) => _ForgotDialog(email: _email.text.trim()),
+    );
+    if (done == true && mounted) {
+      setState(() => _error = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password changed. Log in with your new password.')),
+      );
+    }
+  }
+
   Widget _brandPanel() {
     return Container(
       decoration: const BoxDecoration(
@@ -272,7 +285,10 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                 ),
               ),
-              const SizedBox(height: 22),
+              Center(
+                child: TextButton(onPressed: _forgot, child: const Text('Forgot password?')),
+              ),
+              const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -373,4 +389,128 @@ class _RaysPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Forgot password: a 6-digit code is sent to the admin's email.
+class _ForgotDialog extends StatefulWidget {
+  const _ForgotDialog({required this.email});
+
+  final String email;
+
+  @override
+  State<_ForgotDialog> createState() => _ForgotDialogState();
+}
+
+class _ForgotDialogState extends State<_ForgotDialog> {
+  late final TextEditingController _email = TextEditingController(text: widget.email);
+  final _code = TextEditingController();
+  final _pw = TextEditingController();
+  final _pw2 = TextEditingController();
+  bool _sent = false;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    for (final c in [_email, _code, _pw, _pw2]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final e = _email.text.trim();
+    if (!e.contains('@')) return setState(() => _error = 'Enter your admin email.');
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final err = await AdminService.sendResetCode(e);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = err;
+      _sent = err == null;
+    });
+  }
+
+  Future<void> _reset() async {
+    if (!RegExp(r'^\d{6}$').hasMatch(_code.text.trim())) return setState(() => _error = 'Enter the 6-digit code.');
+    if (_pw.text.length < 8) return setState(() => _error = 'The new password needs at least 8 characters.');
+    if (_pw.text != _pw2.text) return setState(() => _error = 'The new passwords do not match.');
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final err = await AdminService.resetWithCode(_email.text.trim(), _code.text.trim(), _pw.text);
+    if (!mounted) return;
+    if (err == null) {
+      Navigator.pop(context, true);
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _error = err;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(_sent ? 'Enter the code' : 'Forgot password'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              _sent
+                  ? 'We sent a 6-digit code to ${_email.text.trim()}. Enter it with your new password.'
+                  : 'Enter your admin email. We will send a 6-digit code to reset your password.',
+              style: const TextStyle(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 14),
+            if (!_sent)
+              TextField(
+                controller: _email,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.mail_outline)),
+              )
+            else ...[
+              TextField(
+                controller: _code,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: const InputDecoration(labelText: '6-digit code', prefixIcon: Icon(Icons.pin_outlined)),
+              ),
+              TextField(
+                controller: _pw,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password', prefixIcon: Icon(Icons.lock_outline)),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _pw2,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Confirm new password', prefixIcon: Icon(Icons.lock_outline)),
+              ),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: const TextStyle(color: AppColors.error)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+        if (_sent) TextButton(onPressed: _busy ? null : _send, child: const Text('Resend code')),
+        FilledButton(
+          onPressed: _busy ? null : (_sent ? _reset : _send),
+          child: Text(_sent ? 'Reset Password' : 'Send Code'),
+        ),
+      ],
+    );
+  }
 }

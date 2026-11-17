@@ -359,8 +359,8 @@ class _ShellPageState extends State<ShellPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Admin',
+                              Text(
+                                AdminService.displayName,
                                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13),
                               ),
                               Text(

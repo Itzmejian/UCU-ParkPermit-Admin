@@ -360,6 +360,104 @@ static String _sqlDate(DateTime d) =>
     return null;
   }
 
+// ---------- my account ----------
+
+  static User? get currentUser => _c.auth.currentUser;
+
+  static String get displayName {
+    final n = _c.auth.currentUser?.userMetadata?['full_name'];
+    return (n is String && n.trim().isNotEmpty) ? n.trim() : 'Admin';
+  }
+
+  static String _authMsg(AuthException e) {
+    final m = e.message.toLowerCase();
+    if (m.contains('same')) return 'Use a password different from your old one.';
+    if (m.contains('weak') || m.contains('at least')) return 'Use at least 8 characters.';
+    if (m.contains('rate') || m.contains('seconds') || m.contains('security purposes')) {
+      return 'Please wait a minute before trying again.';
+    }
+    if (m.contains('already') || m.contains('registered')) return 'That email is already used by another account.';
+    if (m.contains('expired') || m.contains('invalid') || m.contains('token')) return 'The code is wrong or expired.';
+    return e.message;
+  }
+
+  /// Checks the current password by logging in again with it.
+  static Future<String?> _checkPassword(String current) async {
+    final e = email;
+    if (e == null) return 'Please log in again.';
+    try {
+      await _c.auth.signInWithPassword(email: e, password: current);
+      return null;
+    } on AuthException {
+      return 'Your current password is wrong.';
+    } catch (_) {
+      return 'No internet connection. Please try again.';
+    }
+  }
+
+  static Future<String?> changePassword(String current, String next) async {
+    final bad = await _checkPassword(current);
+    if (bad != null) return bad;
+    try {
+      await _c.auth.updateUser(UserAttributes(password: next));
+      return null;
+    } on AuthException catch (e) {
+      return _authMsg(e);
+    } catch (_) {
+      return 'No internet connection. Please try again.';
+    }
+  }
+
+  static Future<String?> changeEmail(String current, String newEmail) async {
+    final bad = await _checkPassword(current);
+    if (bad != null) return bad;
+    try {
+      await _c.auth.updateUser(UserAttributes(email: newEmail));
+      return null;
+    } on AuthException catch (e) {
+      return _authMsg(e);
+    } catch (_) {
+      return 'No internet connection. Please try again.';
+    }
+  }
+
+  static Future<String?> updateName(String name) async {
+    try {
+      await _c.auth.updateUser(UserAttributes(data: {'full_name': name}));
+      return null;
+    } on AuthException catch (e) {
+      return _authMsg(e);
+    } catch (_) {
+      return 'No internet connection. Please try again.';
+    }
+  }
+
+  // ---------- forgot password (6-digit code by email) ----------
+
+  static Future<String?> sendResetCode(String address) async {
+    try {
+      await _c.auth.resetPasswordForEmail(address);
+      return null;
+    } on AuthException catch (e) {
+      return _authMsg(e);
+    } catch (_) {
+      return 'No internet connection. Please try again.';
+    }
+  }
+
+  static Future<String?> resetWithCode(String address, String code, String next) async {
+    try {
+      await _c.auth.verifyOTP(type: OtpType.recovery, email: address, token: code);
+      await _c.auth.updateUser(UserAttributes(password: next));
+      await signOut();
+      return null;
+    } on AuthException catch (e) {
+      return _authMsg(e);
+    } catch (_) {
+      return 'No internet connection. Please try again.';
+    }
+  }
+
   static Future<String?> closeTicket(String id) => _run(() async {
         await _c.rpc('admin_close_ticket', params: {'p_id': id});
       });
