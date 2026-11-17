@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../admin_service.dart';
 import '../ui.dart';
+import 'account_page.dart';
 import 'applications_page.dart';
 import 'dashboard_page.dart';
+import 'guards_page.dart';
 import 'permits_page.dart';
 import 'plate_changes_page.dart';
 import 'privacy.dart';
@@ -35,6 +37,8 @@ class _ShellPageState extends State<ShellPage> {
     ('Support', Icons.support_agent_outlined, Icons.support_agent),
     ('Gate scans', Icons.qr_code_scanner_outlined, Icons.qr_code_scanner),
     ('Users', Icons.people_outline, Icons.people),
+    ('Guards', Icons.shield_outlined, Icons.shield),
+    ('My account', Icons.manage_accounts_outlined, Icons.manage_accounts),
   ];
 
   @override
@@ -190,7 +194,9 @@ class _ShellPageState extends State<ShellPage> {
       4 => ReplacementsPage(key: key, initialFilter: _filters[4]),
       5 => SupportPage(key: key, initialFilter: _filters[5]),
       6 => ScanLogPage(key: key),
-      _ => UsersPage(key: key),
+      7 => UsersPage(key: key),
+      8 => GuardsPage(key: key),
+      _ => AccountPage(key: key, onChanged: () => setState(() {})),
     };
   }
 

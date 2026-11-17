@@ -45,6 +45,7 @@ class ListPageFrame extends StatelessWidget {
     required this.children,
     this.onSearch,
     this.searchHint,
+    this.actions = const [],
   });
 
   final String title;
@@ -58,6 +59,9 @@ class ListPageFrame extends StatelessWidget {
   final List<Widget> children;
   final ValueChanged<String>? onSearch;
   final String? searchHint;
+
+  /// Extra buttons next to the title (for example "Invite guard").
+  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
@@ -111,6 +115,7 @@ class ListPageFrame extends StatelessWidget {
                   ),
                 ),
               IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: onRefresh),
+              ...actions,
             ],
           ),
           const SizedBox(height: 14),

@@ -17,6 +17,10 @@ class AdminService {
     if (m.contains('NOT_FOUND')) return 'Record not found. Refresh the page.';
     if (m.contains('BAD_INPUT')) return 'Please check what you entered.';
     if (m.contains('PROTECTED_ACCOUNT')) return 'Admin and guard accounts cannot be removed here.';
+    if (m.contains('HAS_STUDENT_DATA')) return 'This email belongs to a student or employee with vehicles. Use a different email.';
+    if (m.contains('BAD_EMAIL')) return 'Enter a valid email address.';
+    if (m.contains('BAD_NAME')) return "Enter the guard's full name.";
+    if (m.contains('NOT_A_GUARD')) return 'This email is not a guard account.';
     if (m.contains('CONFIRM_MISMATCH')) return 'The ID number you typed does not match.';
     if (m.toLowerCase().contains('failed to fetch') ||
         m.toLowerCase().contains('socket')) {
@@ -483,5 +487,47 @@ static String _sqlDate(DateTime d) =>
 
   static Future<String?> closeTicket(String id) => _run(() async {
         await _c.rpc('admin_close_ticket', params: {'p_id': id});
+      });
+
+// ---------- guards ----------
+
+  /// Every guard with their email, status and number of gate scans.
+  static Future<List<Map<String, dynamic>>> guards() async {
+    final rows = await _c.rpc('admin_list_guards');
+    return List<Map<String, dynamic>>.from(rows as List);
+  }
+
+  /// Creates the guard's login (if new) and emails them a 6-digit code.
+  /// With [resend], only emails a new code. Returns an error message or null.
+  static Future<String?> inviteGuard(String email, String name, {bool resend = false}) async {
+    try {
+      final res = await _c.functions.invoke(
+        'invite-guard',
+        body: {'email': email.trim(), 'name': name.trim(), 'resend': resend},
+      );
+      final data = res.data;
+      if (data is Map && data['error'] != null && data['ok'] != true) {
+        return friendly(data['error'].toString());
+      }
+      if (data is Map && data['emailSent'] == false) {
+        final why = data['error']?.toString().toLowerCase() ?? '';
+        if (why.contains('second') || why.contains('rate') || why.contains('security')) {
+          return 'Guard saved, but please wait a minute before sending another code.';
+        }
+        return 'Guard saved, but the email could not be sent. Try "Resend code" later.';
+      }
+      return null;
+    } on FunctionException catch (e) {
+      final d = e.details;
+      final msg = d is Map && d['error'] != null ? d['error'].toString() : (e.reasonPhrase ?? 'Error ${e.status}');
+      if (msg.contains('PROTECTED_ACCOUNT')) return 'This email is an admin account. Use a different email.';
+      return friendly(msg);
+    } catch (e) {
+      return friendly(e);
+    }
+  }
+
+  static Future<String?> setGuard(String userId, String name, bool active) => _run(() async {
+        await _c.rpc('admin_set_guard', params: {'p_user': userId, 'p_name': name, 'p_active': active});
       });
 }
