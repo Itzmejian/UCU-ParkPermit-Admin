@@ -3,8 +3,9 @@ import '../admin_service.dart';
 import '../ui.dart';
 import 'common.dart';
 
-/// Guard accounts. The admin enters the guard's details and Gmail; the guard
-/// gets a 6-digit code, checks these details in the app and sets a password.
+/// Guard accounts. The admin enters the guard's personal details and Gmail;
+/// the Guard ID is made automatically. The guard gets a 6-digit code, checks
+/// these details in the app and sets a password.
 class GuardsPage extends StatefulWidget {
   const GuardsPage({super.key});
 
@@ -12,20 +13,30 @@ class GuardsPage extends StatefulWidget {
   State<GuardsPage> createState() => _GuardsPageState();
 }
 
-const List<String> kGuardShifts = [
-  'Morning (6:00 AM - 2:00 PM)',
-  'Afternoon (2:00 PM - 10:00 PM)',
-  'Night (10:00 PM - 6:00 AM)',
-  'Day (7:00 AM - 7:00 PM)',
-  'Rotating',
-];
+const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-bool _isPending(Map<String, dynamic> g) => g['active'] == true && str(g['activated_at']).isEmpty;
+/// "1995-03-07" -> "Mar 7, 1995"
+String fmtBirthday(dynamic v) {
+  final d = DateTime.tryParse(str(v));
+  if (d == null) return '';
+  return '${_months[d.month - 1]} ${d.day}, ${d.year}';
+}
+
+int? ageFrom(dynamic v) {
+  final d = DateTime.tryParse(str(v));
+  if (d == null) return null;
+  final now = DateTime.now();
+  var age = now.year - d.year;
+  if (now.month < d.month || (now.month == d.month && now.day < d.day)) age--;
+  return age;
+}
+
+String fullAddress(Map<String, dynamic> g) =>
+    [str(g['address']), str(g['city']), str(g['province'])].where((s) => s.isNotEmpty).join(', ');
+
+bool _isPending(Map<String, dynamic> g) => str(g['activated_at']).isEmpty;
 
 Widget guardStatusPill(Map<String, dynamic> g) {
-  if (g['active'] != true) {
-    return const Pill('Deactivated', bg: AppColors.errorLight, fg: AppColors.error, border: AppColors.error);
-  }
   if (_isPending(g)) {
     return const Pill('Waiting for guard', bg: AppColors.goldLight, fg: AppColors.goldDark, border: AppColors.gold);
   }
@@ -43,7 +54,6 @@ class _GuardsPageState extends State<GuardsPage> {
     'all': 'All',
     'active': 'Active',
     'pending': 'Waiting for guard',
-    'inactive': 'Deactivated',
   };
 
   @override
@@ -77,14 +87,13 @@ class _GuardsPageState extends State<GuardsPage> {
     final q = _query.trim().toLowerCase();
     return _rows.where((r) {
       final ok = switch (_filter) {
-        'active' => r['active'] == true && !_isPending(r),
+        'active' => !_isPending(r),
         'pending' => _isPending(r),
-        'inactive' => r['active'] != true,
         _ => true,
       };
       if (!ok) return false;
       if (q.isEmpty) return true;
-      return '${r['full_name']} ${r['email']} ${r['id_no']} ${r['post']}'.toLowerCase().contains(q);
+      return '${r['full_name']} ${r['email']} ${r['id_no']} ${r['phone']}'.toLowerCase().contains(q);
     }).toList();
   }
 
@@ -100,12 +109,12 @@ class _GuardsPageState extends State<GuardsPage> {
   }
 
   Future<void> _details(Map<String, dynamic> g) async {
-    final saved = await showDialog<bool>(
+    final saved = await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (_) => _GuardFormDialog(guard: g),
     );
-    if (saved == true && mounted) {
+    if (saved != null && mounted) {
       showSnack(context, 'Guard details saved.');
       _load();
     }
@@ -127,30 +136,85 @@ class _GuardsPageState extends State<GuardsPage> {
     showSnack(context, err ?? 'New code sent to ${str(g['email'])}.');
   }
 
-  Future<void> _toggle(Map<String, dynamic> g) async {
-    final active = g['active'] == true;
-    final ok = await confirmDialog(
-      context,
-      title: active ? 'Deactivate this guard?' : 'Activate this guard?',
-      message: active
-          ? '${str(g['full_name'])} will no longer be able to log in to the guard module or check stickers. '
-              'Their past gate scans are kept.'
-          : '${str(g['full_name'])} will be able to log in to the guard module again.',
-      action: active ? 'Deactivate' : 'Activate',
-      color: active ? AppColors.error : AppColors.navy,
+  Future<void> _delete(Map<String, dynamic> g) async {
+    final id = str(g['id_no']);
+    final ctrl = TextEditingController();
+    String? err;
+    var busy = false;
+    final deleted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) {
+          return AlertDialog(
+            title: const Text('Delete this guard?'),
+            content: SizedBox(
+              width: 440,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${str(g['full_name'])} (${str(g['email'])}) will be removed and can no longer log in '
+                    'to the guard module. This cannot be undone.\n\n'
+                    'Their past gate scans stay in the Gate scans log with their name.',
+                  ),
+                  const SizedBox(height: 14),
+                  Text('Type the Guard ID $id to confirm:', style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: ctrl,
+                    autofocus: true,
+                    decoration: InputDecoration(hintText: id, isDense: true),
+                  ),
+                  if (err != null) ...[
+                    const SizedBox(height: 8),
+                    Text(err!, style: const TextStyle(color: AppColors.error, fontSize: 13)),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+                onPressed: busy
+                    ? null
+                    : () async {
+                        if (ctrl.text.trim().toUpperCase() != id.toUpperCase()) {
+                          setD(() => err = 'Type $id exactly.');
+                          return;
+                        }
+                        setD(() => busy = true);
+                        final e = await AdminService.deleteGuard(str(g['user_id']), ctrl.text.trim());
+                        if (!ctx.mounted) return;
+                        if (e != null) {
+                          setD(() {
+                            busy = false;
+                            err = e;
+                          });
+                          return;
+                        }
+                        Navigator.pop(ctx, true);
+                      },
+                child: Text(busy ? 'Deleting...' : 'Delete guard'),
+              ),
+            ],
+          );
+        },
+      ),
     );
-    if (!ok) return;
-    final err = await AdminService.setGuard(str(g['user_id']), str(g['full_name']), !active);
-    if (!mounted) return;
-    showSnack(context, err ?? (active ? 'Guard deactivated.' : 'Guard activated.'));
-    if (err == null) _load();
+    ctrl.dispose();
+    if (deleted == true && mounted) {
+      showSnack(context, '${str(g['full_name'])} was deleted.');
+      _load();
+    }
   }
 
   Widget _row(Map<String, dynamic> g) {
-    final active = g['active'] == true;
     final scans = int.tryParse(str(g['scans'])) ?? 0;
     final last = str(g['last_scan']);
-    final post = [str(g['post']), str(g['shift'])].where((s) => s.isNotEmpty).join('  |  ');
+    final phone = str(g['phone']);
     return RowCard(
       child: Wrap(
         spacing: 24,
@@ -160,20 +224,16 @@ class _GuardsPageState extends State<GuardsPage> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircleAvatar(
+              const CircleAvatar(
                 radius: 20,
-                backgroundColor: active ? AppColors.navy : AppColors.border,
-                child: const Icon(Icons.shield_outlined, color: Colors.white, size: 20),
+                backgroundColor: AppColors.navy,
+                child: Icon(Icons.shield_outlined, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 12),
               infoCol(str(g['full_name']), str(g['email']), width: 250),
             ],
           ),
-          infoCol(
-            str(g['id_no']).isEmpty ? 'No guard ID' : 'ID ${str(g['id_no'])}',
-            post.isEmpty ? 'No post or shift yet' : post,
-            width: 250,
-          ),
+          infoCol(str(g['id_no']), phone.isEmpty ? 'No mobile number' : phone, mono: true, width: 190),
           infoCol(
             '$scans scan${scans == 1 ? '' : 's'}',
             last.isEmpty ? 'No scans yet' : 'Last: ${fmtDate(last)}',
@@ -195,10 +255,10 @@ class _GuardsPageState extends State<GuardsPage> {
                 label: const Text('Resend code'),
               ),
               OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(foregroundColor: active ? AppColors.error : AppColors.success),
-                onPressed: () => _toggle(g),
-                icon: Icon(active ? Icons.block : Icons.check_circle_outline, size: 18),
-                label: Text(active ? 'Deactivate' : 'Activate'),
+                style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
+                onPressed: () => _delete(g),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Delete'),
               ),
             ],
           ),
@@ -219,7 +279,7 @@ class _GuardsPageState extends State<GuardsPage> {
       error: _error,
       emptyText: 'No guards here. Tap "Invite guard" to add one.',
       onSearch: (q) => setState(() => _query = q),
-      searchHint: 'Search name, email, ID or post',
+      searchHint: 'Search name, email, ID or mobile',
       actions: [
         FilledButton.icon(
           onPressed: _invite,
@@ -233,6 +293,7 @@ class _GuardsPageState extends State<GuardsPage> {
 }
 
 /// Invite a new guard (no [guard]) or view and edit an existing guard.
+/// Pops with the email (invite) or 'saved' (edit).
 class _GuardFormDialog extends StatefulWidget {
   const _GuardFormDialog({this.guard});
 
@@ -246,11 +307,12 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
   late final Map<String, dynamic> _g = widget.guard ?? const {};
   late final _name = TextEditingController(text: str(_g['full_name']));
   late final _email = TextEditingController(text: str(_g['email']));
-  late final _idNo = TextEditingController(text: str(_g['id_no']));
   late final _phone = TextEditingController(text: str(_g['phone']));
-  late final _post = TextEditingController(text: str(_g['post']));
   late final _address = TextEditingController(text: str(_g['address']));
-  late String? _shift = str(_g['shift']).isEmpty ? null : str(_g['shift']);
+  late final _city = TextEditingController(text: str(_g['city']).isEmpty ? 'Urdaneta City' : str(_g['city']));
+  late final _province = TextEditingController(text: str(_g['province']).isEmpty ? 'Pangasinan' : str(_g['province']));
+  late DateTime? _birth = DateTime.tryParse(str(_g['birthdate']));
+  late String? _sex = str(_g['sex']).isEmpty ? null : str(_g['sex']);
   bool _busy = false;
   String? _error;
 
@@ -258,19 +320,40 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
 
   @override
   void dispose() {
-    for (final c in [_name, _email, _idNo, _phone, _post, _address]) {
+    for (final c in [_name, _email, _phone, _address, _city, _province]) {
       c.dispose();
     }
     super.dispose();
   }
 
+  String get _birthText {
+    final b = _birth;
+    if (b == null) return '';
+    return '${b.year.toString().padLeft(4, '0')}-${b.month.toString().padLeft(2, '0')}-${b.day.toString().padLeft(2, '0')}';
+  }
+
   Map<String, String> get _details => {
-        'id_no': _idNo.text.trim(),
         'phone': _phone.text.trim().replaceAll(' ', ''),
-        'post': _post.text.trim(),
-        'shift': _shift ?? '',
+        'birthdate': _birthText,
+        'sex': _sex ?? '',
         'address': _address.text.trim(),
+        'city': _city.text.trim(),
+        'province': _province.text.trim(),
       };
+
+  Future<void> _pickBirthday() async {
+    final now = DateTime.now();
+    final latest = DateTime(now.year - 18, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _birth ?? DateTime(now.year - 30, 1, 1),
+      firstDate: DateTime(1940),
+      lastDate: latest,
+      helpText: 'Guard birthday',
+      initialEntryMode: DatePickerEntryMode.calendarOnly,
+    );
+    if (picked != null) setState(() => _birth = picked);
+  }
 
   String? _check() {
     if (_name.text.trim().length < 2) return "Enter the guard's full name.";
@@ -278,9 +361,14 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
       return 'Enter a valid email address (for example a Gmail).';
     }
     final phone = _phone.text.trim().replaceAll(' ', '');
-    if (phone.isNotEmpty && !RegExp(r'^(09\d{9}|\+639\d{9})$').hasMatch(phone)) {
-      return 'Mobile number should look like 09XXXXXXXXX.';
+    if (!RegExp(r'^(09\d{9}|\+639\d{9})$').hasMatch(phone)) {
+      return 'Enter the mobile number (09XXXXXXXXX).';
     }
+    if (_birth == null) return 'Choose the birthday.';
+    if (_sex == null) return 'Choose the sex.';
+    if (_address.text.trim().length < 3) return 'Enter the house no., street and barangay.';
+    if (_city.text.trim().length < 2) return 'Enter the city or municipality.';
+    if (_province.text.trim().length < 2) return 'Enter the province.';
     return null;
   }
 
@@ -298,16 +386,12 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
     if (_isNew) {
       err = await AdminService.inviteGuard(_email.text.trim().toLowerCase(), _name.text.trim(), details: _details);
     } else {
-      err = await AdminService.updateGuard(
-        str(_g['user_id']),
-        {'name': _name.text.trim(), ..._details},
-        _g['active'] == true,
-      );
+      err = await AdminService.updateGuard(str(_g['user_id']), {'name': _name.text.trim(), ..._details});
     }
     if (!mounted) return;
     if (err == null || err.startsWith('Guard saved')) {
       if (err != null) showSnack(context, err);
-      Navigator.pop<Object>(context, _isNew ? _email.text.trim().toLowerCase() : true);
+      Navigator.pop(context, _isNew ? _email.text.trim().toLowerCase() : 'saved');
       return;
     }
     setState(() {
@@ -324,14 +408,12 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
     bool enabled = true,
     TextInputType? type,
     TextCapitalization caps = TextCapitalization.none,
-    int maxLines = 1,
   }) {
     return TextField(
       controller: c,
       enabled: enabled && !_busy,
       keyboardType: type,
       textCapitalization: caps,
-      maxLines: maxLines,
       decoration: InputDecoration(labelText: label, hintText: hint, prefixIcon: icon == null ? null : Icon(icon)),
     );
   }
@@ -350,10 +432,18 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
     );
   }
 
+  Widget _section(String text) => Padding(
+        padding: const EdgeInsets.only(top: 18, bottom: 10),
+        child: Text(
+          text.toUpperCase(),
+          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: AppColors.goldDark),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
-    final shifts = [...kGuardShifts, if (_shift != null && !kGuardShifts.contains(_shift)) _shift!];
     final scans = int.tryParse(str(_g['scans'])) ?? 0;
+    final age = ageFrom(_birthText);
     return AlertDialog(
       title: Row(
         children: [
@@ -362,7 +452,7 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
         ],
       ),
       content: SizedBox(
-        width: 560,
+        width: 580,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -370,53 +460,81 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
             children: [
               Text(
                 _isNew
-                    ? 'Enter the guard\'s details. They will get an email with a 6-digit code. In the app they tap '
-                        '"Create guard account", enter the code, check these details and create their own password.'
+                    ? 'Enter the guard\'s details. The Guard ID is made automatically. The guard will get an email '
+                        'with a 6-digit code. In the app they tap "Create guard account", enter the code, check these '
+                        'details and create their own password.'
                     : 'The guard sees these details when they create their account in the app.',
                 style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
               ),
-              const SizedBox(height: 16),
-              _field(_name, 'Full name *', hint: 'Juan Dela Cruz', icon: Icons.person_outline, caps: TextCapitalization.words),
-              const SizedBox(height: 12),
-              _field(
-                _email,
-                'Email (Gmail) *',
-                hint: 'guard.name@gmail.com',
-                icon: Icons.mail_outline,
-                type: TextInputType.emailAddress,
-                enabled: _isNew,
-              ),
+              if (!_isNew) ...[
+                const SizedBox(height: 12),
+                InfoRow('Guard ID', str(_g['id_no']), mono: true),
+              ],
+              _section('Account'),
+              _field(_name, 'Full name *', hint: 'Juan P. Dela Cruz', icon: Icons.person_outline, caps: TextCapitalization.words),
               const SizedBox(height: 12),
               _pair(
-                _field(_idNo, 'Guard ID no.', hint: 'SG-2026-001', icon: Icons.badge_outlined),
-                _field(_phone, 'Mobile number', hint: '09XXXXXXXXX', icon: Icons.phone_outlined, type: TextInputType.phone),
+                _field(
+                  _email,
+                  'Email (Gmail) *',
+                  hint: 'guard.name@gmail.com',
+                  icon: Icons.mail_outline,
+                  type: TextInputType.emailAddress,
+                  enabled: _isNew,
+                ),
+                _field(_phone, 'Mobile number *', hint: '09XXXXXXXXX', icon: Icons.phone_outlined, type: TextInputType.phone),
               ),
-              const SizedBox(height: 12),
+              _section('Personal information'),
               _pair(
-                _field(_post, 'Assigned post / gate', hint: 'Main Gate', icon: Icons.location_on_outlined, caps: TextCapitalization.words),
+                InkWell(
+                  onTap: _busy ? null : _pickBirthday,
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Birthday *',
+                      prefixIcon: Icon(Icons.cake_outlined),
+                      suffixIcon: Icon(Icons.calendar_month_outlined),
+                    ),
+                    child: Text(
+                      _birth == null ? 'Choose date' : '${fmtBirthday(_birthText)}${age == null ? '' : '  ($age yrs old)'}',
+                      style: TextStyle(color: _birth == null ? AppColors.textHint : AppColors.textDark),
+                    ),
+                  ),
+                ),
                 InputDecorator(
                   decoration: const InputDecoration(
-                    labelText: 'Shift',
-                    prefixIcon: Icon(Icons.schedule),
+                    labelText: 'Sex *',
+                    prefixIcon: Icon(Icons.wc_outlined),
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
-                      value: _shift,
+                      value: _sex,
                       isExpanded: true,
-                      hint: const Text('Choose shift'),
-                      items: [
-                        for (final s in shifts) DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)),
+                      hint: const Text('Choose'),
+                      items: const [
+                        DropdownMenuItem(value: 'Male', child: Text('Male')),
+                        DropdownMenuItem(value: 'Female', child: Text('Female')),
                       ],
-                      onChanged: _busy ? null : (v) => setState(() => _shift = v),
+                      onChanged: _busy ? null : (v) => setState(() => _sex = v),
                     ),
                   ),
                 ),
               ),
+              _section('Home address'),
+              _field(
+                _address,
+                'House no., street, barangay *',
+                hint: 'Blk 2 Lot 5, Rizal St., Brgy. Poblacion',
+                icon: Icons.home_outlined,
+                caps: TextCapitalization.words,
+              ),
               const SizedBox(height: 12),
-              _field(_address, 'Home address', hint: 'Barangay, City, Pangasinan', icon: Icons.home_outlined, caps: TextCapitalization.words, maxLines: 2),
+              _pair(
+                _field(_city, 'City / Municipality *', hint: 'Urdaneta City', icon: Icons.location_city_outlined, caps: TextCapitalization.words),
+                _field(_province, 'Province *', hint: 'Pangasinan', icon: Icons.map_outlined, caps: TextCapitalization.words),
+              ),
               if (!_isNew) ...[
-                const SizedBox(height: 16),
+                _section('Account status'),
                 InfoRow('Invited', str(_g['invited_at']).isEmpty ? '-' : fmtDate(_g['invited_at'])),
                 InfoRow(
                   'Account created',
