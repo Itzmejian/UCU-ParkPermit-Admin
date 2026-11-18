@@ -5,8 +5,8 @@ import 'package:web/web.dart' as web;
 import '../admin_service.dart';
 import '../ui.dart';
 
-/// Details on the left, actions and files on the right. On narrow screens the
-/// right side comes first, then the details.
+/// Details on the left, actions and files on the right. On phones it becomes
+/// one column: the title, then the actions and files, then the other details.
 class ReviewLayout extends StatelessWidget {
   const ReviewLayout({super.key, required this.left, required this.right});
 
@@ -21,7 +21,12 @@ class ReviewLayout extends StatelessWidget {
         if (c.maxWidth < 1000) {
           return ListView(
             padding: EdgeInsets.all(pad),
-            children: [...right, const SizedBox(height: 16), ...left],
+            children: [
+              if (left.isNotEmpty) left.first,
+              ...right,
+              const SizedBox(height: 16),
+              ...left.skip(1),
+            ],
           );
         }
         return Row(

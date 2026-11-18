@@ -4,14 +4,16 @@ import '../ui.dart';
 import 'common.dart';
 
 class ScanLogPage extends StatefulWidget {
-  const ScanLogPage({super.key});
+  const ScanLogPage({super.key, this.initialFilter});
+
+  final String? initialFilter;
 
   @override
   State<ScanLogPage> createState() => _ScanLogPageState();
 }
 
 class _ScanLogPageState extends State<ScanLogPage> {
-  String _filter = 'all';
+  late String _filter = widget.initialFilter ?? 'all';
   List<Map<String, dynamic>> _rows = [];
   bool _loading = true;
   String? _error;

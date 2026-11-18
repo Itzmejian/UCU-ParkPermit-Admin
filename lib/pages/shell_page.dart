@@ -193,7 +193,7 @@ class _ShellPageState extends State<ShellPage> {
       3 => PlateChangesPage(key: key),
       4 => ReplacementsPage(key: key, initialFilter: _filters[4]),
       5 => SupportPage(key: key, initialFilter: _filters[5]),
-      6 => ScanLogPage(key: key),
+      6 => ScanLogPage(key: key, initialFilter: _filters[6]),
       7 => UsersPage(key: key),
       8 => GuardsPage(key: key),
       _ => AccountPage(key: key, onChanged: () => setState(() {})),
