@@ -19,7 +19,9 @@ class AdminService {
     if (m.contains('PROTECTED_ACCOUNT')) return 'Admin and guard accounts cannot be removed here.';
     if (m.contains('HAS_STUDENT_DATA')) return 'This email belongs to a student or employee with vehicles. Use a different email.';
     if (m.contains('BAD_EMAIL')) return 'Enter a valid email address.';
-    if (m.contains('BAD_NAME')) return "Enter the guard's full name.";
+    if (m.contains('BAD_NAME')) return "Enter the guard's first name and last name.";
+    if (m.contains('BAD_PHONE')) return 'Enter a valid mobile number (09XXXXXXXXX).';
+    if (m.contains('BAD_ADDRESS')) return 'Choose the city or municipality and the barangay.';
     if (m.contains('BAD_BIRTHDATE')) return 'Check the birthday. A guard must be at least 18 years old.';
     if (m.contains('NOT_A_GUARD')) return 'This email is not a guard account.';
     if (m.contains('CONFIRM_MISMATCH')) return 'The ID you typed does not match.';
@@ -533,19 +535,22 @@ static String _sqlDate(DateTime d) =>
     }
   }
 
-  /// Saves the guard's details. [d] keys: name, phone, birthdate (YYYY-MM-DD),
-  /// sex, address, city, province.
+  /// Saves the guard's details. [d] keys: first_name, middle_name, last_name,
+  /// suffix, phone (09XXXXXXXXX), birthdate (YYYY-MM-DD), sex, street, barangay, city.
   static Future<String?> updateGuard(String userId, Map<String, String> d) => _run(() async {
         final birth = d['birthdate'] ?? '';
         await _c.rpc('admin_update_guard', params: {
           'p_user': userId,
-          'p_name': d['name'] ?? '',
+          'p_first': d['first_name'] ?? '',
+          'p_middle': d['middle_name'] ?? '',
+          'p_last': d['last_name'] ?? '',
+          'p_suffix': d['suffix'] ?? '',
           'p_phone': d['phone'] ?? '',
           'p_birthdate': birth.isEmpty ? null : birth,
           'p_sex': d['sex'] ?? '',
-          'p_address': d['address'] ?? '',
+          'p_street': d['street'] ?? '',
+          'p_barangay': d['barangay'] ?? '',
           'p_city': d['city'] ?? '',
-          'p_province': d['province'] ?? '',
         });
       });
 

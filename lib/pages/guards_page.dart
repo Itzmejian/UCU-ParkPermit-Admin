@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../admin_service.dart';
 import '../ui.dart';
+import '../pangasinan_address.dart';
 import 'common.dart';
 
 /// Guard accounts. The admin enters the guard's personal details and Gmail;
@@ -32,7 +33,7 @@ int? ageFrom(dynamic v) {
 }
 
 String fullAddress(Map<String, dynamic> g) =>
-    [str(g['address']), str(g['city']), str(g['province'])].where((s) => s.isNotEmpty).join(', ');
+    [str(g['address']), str(g['barangay']), str(g['city']), str(g['province'])].where((s) => s.isNotEmpty).join(', ');
 
 bool _isPending(Map<String, dynamic> g) => str(g['activated_at']).isEmpty;
 
@@ -305,22 +306,27 @@ class _GuardFormDialog extends StatefulWidget {
 
 class _GuardFormDialogState extends State<_GuardFormDialog> {
   late final Map<String, dynamic> _g = widget.guard ?? const {};
-  late final _name = TextEditingController(text: str(_g['full_name']));
+  late final _first = TextEditingController(text: str(_g['first_name']));
+  late final _middle = TextEditingController(text: str(_g['middle_name']));
+  late final _last = TextEditingController(text: str(_g['last_name']));
   late final _email = TextEditingController(text: str(_g['email']));
   late final _phone = TextEditingController(text: str(_g['phone']));
-  late final _address = TextEditingController(text: str(_g['address']));
-  late final _city = TextEditingController(text: str(_g['city']).isEmpty ? 'Urdaneta City' : str(_g['city']));
-  late final _province = TextEditingController(text: str(_g['province']).isEmpty ? 'Pangasinan' : str(_g['province']));
+  late final _street = TextEditingController(text: str(_g['address']));
+  late String? _suffix = str(_g['suffix']).isEmpty ? null : str(_g['suffix']);
   late DateTime? _birth = DateTime.tryParse(str(_g['birthdate']));
   late String? _sex = str(_g['sex']).isEmpty ? null : str(_g['sex']);
+  late String? _city = matchPangasinanCity(str(_g['city']));
+  late String? _barangay = _city == null ? null : matchPangasinanBarangay(_city!, str(_g['barangay']));
   bool _busy = false;
   String? _error;
+
+  static const _suffixes = ['Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
 
   bool get _isNew => widget.guard == null;
 
   @override
   void dispose() {
-    for (final c in [_name, _email, _phone, _address, _city, _province]) {
+    for (final c in [_first, _middle, _last, _email, _phone, _street]) {
       c.dispose();
     }
     super.dispose();
@@ -332,13 +338,21 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
     return '${b.year.toString().padLeft(4, '0')}-${b.month.toString().padLeft(2, '0')}-${b.day.toString().padLeft(2, '0')}';
   }
 
+  String get _fullName => [_first.text.trim(), _middle.text.trim(), _last.text.trim(), _suffix ?? '']
+      .where((s) => s.isNotEmpty)
+      .join(' ');
+
   Map<String, String> get _details => {
+        'first_name': _first.text.trim(),
+        'middle_name': _middle.text.trim(),
+        'last_name': _last.text.trim(),
+        'suffix': _suffix ?? '',
         'phone': _phone.text.trim().replaceAll(' ', ''),
         'birthdate': _birthText,
         'sex': _sex ?? '',
-        'address': _address.text.trim(),
-        'city': _city.text.trim(),
-        'province': _province.text.trim(),
+        'street': _street.text.trim(),
+        'barangay': _barangay ?? '',
+        'city': _city ?? '',
       };
 
   Future<void> _pickBirthday() async {
@@ -356,19 +370,18 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
   }
 
   String? _check() {
-    if (_name.text.trim().length < 2) return "Enter the guard's full name.";
+    if (_first.text.trim().isEmpty) return 'Enter the first name.';
+    if (_last.text.trim().isEmpty) return 'Enter the last name.';
     if (_isNew && !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(_email.text.trim())) {
       return 'Enter a valid email address (for example a Gmail).';
     }
-    final phone = _phone.text.trim().replaceAll(' ', '');
-    if (!RegExp(r'^(09\d{9}|\+639\d{9})$').hasMatch(phone)) {
+    if (!RegExp(r'^09\d{9}$').hasMatch(_phone.text.trim().replaceAll(' ', ''))) {
       return 'Enter the mobile number (09XXXXXXXXX).';
     }
     if (_birth == null) return 'Choose the birthday.';
     if (_sex == null) return 'Choose the sex.';
-    if (_address.text.trim().length < 3) return 'Enter the house no., street and barangay.';
-    if (_city.text.trim().length < 2) return 'Enter the city or municipality.';
-    if (_province.text.trim().length < 2) return 'Enter the province.';
+    if (_city == null) return 'Choose the city or municipality.';
+    if (_barangay == null) return 'Choose the barangay.';
     return null;
   }
 
@@ -384,9 +397,9 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
     });
     final String? err;
     if (_isNew) {
-      err = await AdminService.inviteGuard(_email.text.trim().toLowerCase(), _name.text.trim(), details: _details);
+      err = await AdminService.inviteGuard(_email.text.trim().toLowerCase(), _fullName, details: _details);
     } else {
-      err = await AdminService.updateGuard(str(_g['user_id']), {'name': _name.text.trim(), ..._details});
+      err = await AdminService.updateGuard(str(_g['user_id']), _details);
     }
     if (!mounted) return;
     if (err == null || err.startsWith('Guard saved')) {
@@ -408,25 +421,76 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
     bool enabled = true,
     TextInputType? type,
     TextCapitalization caps = TextCapitalization.none,
+    int? maxLength,
   }) {
     return TextField(
       controller: c,
       enabled: enabled && !_busy,
       keyboardType: type,
       textCapitalization: caps,
-      decoration: InputDecoration(labelText: label, hintText: hint, prefixIcon: icon == null ? null : Icon(icon)),
+      maxLength: maxLength,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        counterText: '',
+        prefixIcon: icon == null ? null : Icon(icon),
+      ),
     );
   }
 
-  Widget _pair(Widget a, Widget b) {
+  /// A dropdown that looks like the text fields.
+  Widget _dropdown({
+    required String label,
+    required IconData icon,
+    required String? value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+    String hint = 'Choose',
+    bool enabled = true,
+  }) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        enabled: enabled && !_busy,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          menuMaxHeight: 360,
+          hint: Text(hint, style: const TextStyle(color: AppColors.textHint)),
+          items: [
+            for (final s in items) DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)),
+          ],
+          onChanged: (_busy || !enabled) ? null : onChanged,
+        ),
+      ),
+    );
+  }
+
+  Widget _row(List<Widget> children, {List<int>? flex}) {
     return LayoutBuilder(
       builder: (context, c) {
         if (c.maxWidth < 460) {
-          return Column(children: [a, const SizedBox(height: 12), b]);
+          return Column(
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0) const SizedBox(height: 12),
+                children[i],
+              ],
+            ],
+          );
         }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [Expanded(child: a), const SizedBox(width: 12), Expanded(child: b)],
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const SizedBox(width: 12),
+              Expanded(flex: flex?[i] ?? 1, child: children[i]),
+            ],
+          ],
         );
       },
     );
@@ -444,6 +508,8 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
   Widget build(BuildContext context) {
     final scans = int.tryParse(str(_g['scans'])) ?? 0;
     final age = ageFrom(_birthText);
+    final barangays = _city == null ? const <String>[] : (kPangasinanBarangays[_city] ?? const <String>[]);
+    final edited = str(_g['guard_edited_at']);
     return AlertDialog(
       title: Row(
         children: [
@@ -452,7 +518,7 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
         ],
       ),
       content: SizedBox(
-        width: 580,
+        width: 620,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -461,19 +527,56 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
               Text(
                 _isNew
                     ? 'Enter the guard\'s details. The Guard ID is made automatically. The guard will get an email '
-                        'with a 6-digit code. In the app they tap "Create guard account", enter the code, check these '
-                        'details and create their own password.'
-                    : 'The guard sees these details when they create their account in the app.',
+                        'with a 6-digit code. In the app they tap "Create guard account", enter the code, check '
+                        '(and fix) these details, then create their own password.'
+                    : 'The guard sees these details in the app and can correct them while creating the account.',
                 style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
               ),
               if (!_isNew) ...[
                 const SizedBox(height: 12),
                 InfoRow('Guard ID', str(_g['id_no']), mono: true),
+                if (edited.isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(top: 10),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.goldLight,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.gold),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.edit_note, size: 18, color: AppColors.goldDark),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'The guard updated these details on ${fmtDate(edited)}.',
+                            style: const TextStyle(fontSize: 12.5, color: AppColors.textDark),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
-              _section('Account'),
-              _field(_name, 'Full name *', hint: 'Juan P. Dela Cruz', icon: Icons.person_outline, caps: TextCapitalization.words),
+              _section('Name'),
+              _row([
+                _field(_first, 'First name *', hint: 'Juan', icon: Icons.person_outline, caps: TextCapitalization.words, maxLength: 60),
+                _field(_middle, 'Middle name', hint: 'Optional', caps: TextCapitalization.words, maxLength: 60),
+              ]),
               const SizedBox(height: 12),
-              _pair(
+              _row([
+                _field(_last, 'Last name *', hint: 'Dela Cruz', icon: Icons.badge_outlined, caps: TextCapitalization.words, maxLength: 60),
+                _dropdown(
+                  label: 'Suffix',
+                  icon: Icons.short_text,
+                  value: _suffix,
+                  items: ['None', ..._suffixes],
+                  hint: 'None',
+                  onChanged: (v) => setState(() => _suffix = (v == null || v == 'None') ? null : v),
+                ),
+              ], flex: const [2, 1]),
+              _section('Account and contact'),
+              _row([
                 _field(
                   _email,
                   'Email (Gmail) *',
@@ -482,10 +585,10 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
                   type: TextInputType.emailAddress,
                   enabled: _isNew,
                 ),
-                _field(_phone, 'Mobile number *', hint: '09XXXXXXXXX', icon: Icons.phone_outlined, type: TextInputType.phone),
-              ),
+                _field(_phone, 'Mobile number *', hint: '09XXXXXXXXX', icon: Icons.phone_outlined, type: TextInputType.phone, maxLength: 11),
+              ]),
               _section('Personal information'),
-              _pair(
+              _row([
                 InkWell(
                   onTap: _busy ? null : _pickBirthday,
                   child: InputDecorator(
@@ -500,38 +603,52 @@ class _GuardFormDialogState extends State<_GuardFormDialog> {
                     ),
                   ),
                 ),
+                _dropdown(
+                  label: 'Sex *',
+                  icon: Icons.wc_outlined,
+                  value: _sex,
+                  items: const ['Male', 'Female'],
+                  onChanged: (v) => setState(() => _sex = v),
+                ),
+              ]),
+              _section('Home address'),
+              _row([
                 InputDecorator(
                   decoration: const InputDecoration(
-                    labelText: 'Sex *',
-                    prefixIcon: Icon(Icons.wc_outlined),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    labelText: 'Province',
+                    prefixIcon: Icon(Icons.map_outlined),
+                    suffixIcon: Icon(Icons.lock_outline, size: 18),
                   ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _sex,
-                      isExpanded: true,
-                      hint: const Text('Choose'),
-                      items: const [
-                        DropdownMenuItem(value: 'Male', child: Text('Male')),
-                        DropdownMenuItem(value: 'Female', child: Text('Female')),
-                      ],
-                      onChanged: _busy ? null : (v) => setState(() => _sex = v),
-                    ),
-                  ),
+                  child: const Text(kProvince),
                 ),
-              ),
-              _section('Home address'),
-              _field(
-                _address,
-                'House no., street, barangay *',
-                hint: 'Blk 2 Lot 5, Rizal St., Brgy. Poblacion',
-                icon: Icons.home_outlined,
-                caps: TextCapitalization.words,
-              ),
+                _dropdown(
+                  label: 'City / Municipality *',
+                  icon: Icons.location_city_outlined,
+                  value: _city,
+                  items: kPangasinanCities,
+                  hint: 'Choose city or municipality',
+                  onChanged: (v) => setState(() {
+                    if (v != _city) _barangay = null;
+                    _city = v;
+                  }),
+                ),
+              ]),
               const SizedBox(height: 12),
-              _pair(
-                _field(_city, 'City / Municipality *', hint: 'Urdaneta City', icon: Icons.location_city_outlined, caps: TextCapitalization.words),
-                _field(_province, 'Province *', hint: 'Pangasinan', icon: Icons.map_outlined, caps: TextCapitalization.words),
+              _row([
+                _dropdown(
+                  label: 'Barangay *',
+                  icon: Icons.location_on_outlined,
+                  value: _barangay,
+                  items: barangays,
+                  hint: _city == null ? 'Choose the city first' : 'Choose barangay',
+                  enabled: _city != null,
+                  onChanged: (v) => setState(() => _barangay = v),
+                ),
+                _field(_street, 'Street / Purok (optional)', hint: 'e.g., 123 Rizal St. or Purok 3', icon: Icons.home_outlined, caps: TextCapitalization.words),
+              ]),
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text('Only addresses in Pangasinan are accepted.', style: TextStyle(fontSize: 12, color: AppColors.textHint)),
               ),
               if (!_isNew) ...[
                 _section('Account status'),
