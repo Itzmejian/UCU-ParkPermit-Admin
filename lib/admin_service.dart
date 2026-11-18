@@ -499,11 +499,16 @@ static String _sqlDate(DateTime d) =>
 
   /// Creates the guard's login (if new) and emails them a 6-digit code.
   /// With [resend], only emails a new code. Returns an error message or null.
-  static Future<String?> inviteGuard(String email, String name, {bool resend = false}) async {
+  static Future<String?> inviteGuard(
+    String email,
+    String name, {
+    bool resend = false,
+    Map<String, String> details = const {},
+  }) async {
     try {
       final res = await _c.functions.invoke(
         'invite-guard',
-        body: {'email': email.trim(), 'name': name.trim(), 'resend': resend},
+        body: {'email': email.trim(), 'name': name.trim(), 'resend': resend, ...details},
       );
       final data = res.data;
       if (data is Map && data['error'] != null && data['ok'] != true) {
@@ -529,5 +534,19 @@ static String _sqlDate(DateTime d) =>
 
   static Future<String?> setGuard(String userId, String name, bool active) => _run(() async {
         await _c.rpc('admin_set_guard', params: {'p_user': userId, 'p_name': name, 'p_active': active});
+      });
+
+  /// Saves the guard's details. [d] keys: name, id_no, phone, post, shift, address.
+  static Future<String?> updateGuard(String userId, Map<String, String> d, bool active) => _run(() async {
+        await _c.rpc('admin_update_guard', params: {
+          'p_user': userId,
+          'p_name': d['name'] ?? '',
+          'p_id_no': d['id_no'] ?? '',
+          'p_phone': d['phone'] ?? '',
+          'p_post': d['post'] ?? '',
+          'p_shift': d['shift'] ?? '',
+          'p_address': d['address'] ?? '',
+          'p_active': active,
+        });
       });
 }
