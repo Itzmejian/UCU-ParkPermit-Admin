@@ -18,15 +18,12 @@ class _AccountPageState extends State<AccountPage> {
   final _curPw = TextEditingController();
   final _newPw = TextEditingController();
   final _newPw2 = TextEditingController();
-  final _newEmail = TextEditingController();
-  final _emailPw = TextEditingController();
   bool _busy = false;
   String? _pwError;
-  String? _emailError;
 
   @override
   void dispose() {
-    for (final c in [_name, _curPw, _newPw, _newPw2, _newEmail, _emailPw]) {
+    for (final c in [_name, _curPw, _newPw, _newPw2]) {
       c.dispose();
     }
     super.dispose();
@@ -66,39 +63,6 @@ class _AccountPageState extends State<AccountPage> {
     }
   }
 
-  Future<void> _saveEmail() async {
-    setState(() => _emailError = null);
-    final e = _newEmail.text.trim();
-    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(e)) {
-      return setState(() => _emailError = 'Enter a valid email address.');
-    }
-    if (e.toLowerCase() == (AdminService.email ?? '').toLowerCase()) {
-      return setState(() => _emailError = 'That is already your email.');
-    }
-    if (_emailPw.text.isEmpty) return setState(() => _emailError = 'Enter your current password.');
-    setState(() => _busy = true);
-    final err = await AdminService.changeEmail(_emailPw.text, e);
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _emailError = err;
-    });
-    if (err == null) {
-      _newEmail.clear();
-      _emailPw.clear();
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Check your email'),
-          content: Text(
-            'We sent a confirmation link to $e. Your login email changes only after you open that link. Until then, keep using ${AdminService.email ?? 'your current email'}.',
-          ),
-          actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-        ),
-      );
-    }
-  }
-
   Widget _pwField(TextEditingController c, String label) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -121,42 +85,82 @@ class _AccountPageState extends State<AccountPage> {
   Widget build(BuildContext context) {
     final u = AdminService.currentUser;
     final wide = MediaQuery.sizeOf(context).width >= 1100;
+    final name = AdminService.displayName;
+
+    final account = SectionCard(
+      title: 'Account',
+      children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.inputFill,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: AppColors.navy,
+                child: Text(
+                  name.isEmpty ? 'A' : name[0].toUpperCase(),
+                  style: const TextStyle(color: AppColors.gold, fontSize: 22, fontWeight: FontWeight.w800),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.navy)),
+                    Text(AdminService.email ?? '', style: const TextStyle(color: AppColors.textMuted)),
+                  ],
+                ),
+              ),
+              const Pill('Admin', bg: AppColors.goldLight, fg: AppColors.goldDark, border: AppColors.gold),
+            ],
+          ),
+        ),
+        InfoRow('Role', 'Security Office Admin'),
+        InfoRow('Last log in', fmtDate(u?.lastSignInAt)),
+        InfoRow('Account created', fmtDate(u?.createdAt, time: false)),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _name,
+                decoration: const InputDecoration(labelText: 'Your name', prefixIcon: Icon(Icons.person_outline)),
+              ),
+            ),
+            const SizedBox(width: 10),
+            OutlinedButton(onPressed: _busy ? null : _saveName, child: const Text('Save Name')),
+          ],
+        ),
+      ],
+    );
+
     final password = SectionCard(
       title: 'Change password',
       children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 12),
+          child: Text(
+            'Use at least 8 characters. Forgot it? Use "Forgot password?" on the login page.',
+            style: TextStyle(color: AppColors.textMuted),
+          ),
+        ),
         _pwField(_curPw, 'Current password'),
         _pwField(_newPw, 'New password (at least 8 characters)'),
         _pwField(_newPw2, 'Confirm new password'),
         _error(_pwError),
         Align(
           alignment: Alignment.centerLeft,
-          child: FilledButton(onPressed: _busy ? null : _savePassword, child: const Text('Change Password')),
-        ),
-      ],
-    );
-    final email = SectionCard(
-      title: 'Change email',
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 12),
-          child: Text(
-            'Use an email the Security Office can open. Password reset codes are sent there.',
-            style: TextStyle(color: AppColors.textMuted),
+          child: FilledButton.icon(
+            onPressed: _busy ? null : _savePassword,
+            icon: const Icon(Icons.lock_reset, size: 18),
+            label: const Text('Change Password'),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: TextField(
-            controller: _newEmail,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(labelText: 'New email', prefixIcon: Icon(Icons.mail_outline)),
-          ),
-        ),
-        _pwField(_emailPw, 'Current password'),
-        _error(_emailError),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton(onPressed: _busy ? null : _saveEmail, child: const Text('Change Email')),
         ),
       ],
     );
@@ -164,47 +168,21 @@ class _AccountPageState extends State<AccountPage> {
     return ListView(
       padding: EdgeInsets.all(pagePadding(context)),
       children: [
-        const PageTitle('My account', icon: Icons.manage_accounts_outlined, subtitle: 'Your Security Office login. Keep your email and password private.'),
-        const SizedBox(height: 16),
-        SectionCard(
-          title: 'Account',
-          children: [
-            InfoRow('Email', AdminService.email ?? ''),
-            InfoRow('Role', 'Security Office Admin'),
-            InfoRow('Last log in', fmtDate(u?.lastSignInAt)),
-            InfoRow('Account created', fmtDate(u?.createdAt, time: false)),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                SizedBox(
-                  width: 320,
-                  child: TextField(
-                    controller: _name,
-                    decoration: const InputDecoration(labelText: 'Your name', prefixIcon: Icon(Icons.person_outline)),
-                  ),
-                ),
-                OutlinedButton(onPressed: _busy ? null : _saveName, child: const Text('Save Name')),
-              ],
-            ),
-          ],
-        ),
+        const PageTitle('My account', icon: Icons.manage_accounts_outlined, subtitle: 'Your Security Office login. Keep your password private.'),
         const SizedBox(height: 16),
         if (wide)
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: password),
+              Expanded(child: account),
               const SizedBox(width: 16),
-              Expanded(child: email),
+              Expanded(child: password),
             ],
           )
         else ...[
-          password,
+          account,
           const SizedBox(height: 16),
-          email,
+          password,
         ],
         if (_busy)
           const Padding(

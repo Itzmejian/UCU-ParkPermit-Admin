@@ -78,16 +78,30 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _banner(bool wide) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(26, 22, 26, 26),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [AppColors.navy, AppColors.navyDark],
         ),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: const [BoxShadow(color: Color(0x261D3E7C), blurRadius: 16, offset: Offset(0, 6))],
       ),
-      child: Row(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(26, 22, 26, 24),
+            child: _bannerBody(wide),
+          ),
+          Container(height: 4, color: AppColors.gold),
+        ],
+      ),
+    );
+  }
+
+  Widget _bannerBody(bool wide) {
+    return Row(
         children: [
           Expanded(
             child: Column(
@@ -137,22 +151,50 @@ class _DashboardPageState extends State<DashboardPage> {
             const SizedBox(width: 20),
             const AdminLogo(size: 96),
           ],
-          IconButton(
-            tooltip: 'Refresh',
-            onPressed: _load,
-            icon: const Icon(Icons.refresh, color: Colors.white),
-          ),
         ],
-      ),
     );
   }
 
-  Widget _caption(String text) {
-    return Text(
-      text,
-      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: AppColors.goldDark),
+  /// Section title with an icon and how many items are waiting in it.
+  Widget _caption(String text, IconData icon, int waiting) {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, size: 18, color: AppColors.gold),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          text,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.navy),
+        ),
+        const SizedBox(width: 10),
+        if (!_loading)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+            decoration: BoxDecoration(
+              color: waiting > 0 ? AppColors.goldLight : AppColors.successLight,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: waiting > 0 ? AppColors.gold : AppColors.success),
+            ),
+            child: Text(
+              waiting > 0 ? '$waiting waiting' : 'All clear',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                color: waiting > 0 ? AppColors.goldDark : AppColors.success,
+              ),
+            ),
+          ),
+        const SizedBox(width: 12),
+        const Expanded(child: Divider(color: AppColors.border)),
+      ],
     );
   }
+
+  int _sum(List<String> keys) => keys.fold(0, (t, k) => t + (_counts[k] ?? 0));
 
   double get _cardWidth {
     final w = MediaQuery.sizeOf(context).width;
@@ -160,54 +202,15 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _stat(String label, String key, IconData icon, Color color, int page, String? filter) {
-    final n = _counts[key] ?? 0;
-    final active = n > 0;
     return SizedBox(
       width: _cardWidth,
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => widget.onOpen(page, filter),
-          child: Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: active ? color.withValues(alpha: 0.7) : AppColors.border,
-                width: active ? 1.6 : 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: color),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$n',
-                        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.textDark),
-                      ),
-                      Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right, color: AppColors.textHint),
-              ],
-            ),
-          ),
-        ),
+      child: _StatCard(
+        label: label,
+        count: _counts[key] ?? 0,
+        loading: _loading,
+        icon: icon,
+        color: color,
+        onTap: () => widget.onOpen(page, filter),
       ),
     );
   }
@@ -226,8 +229,8 @@ class _DashboardPageState extends State<DashboardPage> {
               if (_error != null)
                 Text(_error!, style: const TextStyle(color: AppColors.error))
               else ...[
-                _caption('APPLICATIONS'),
-                const SizedBox(height: 10),
+                _caption('Applications', Icons.assignment_outlined, _sum(['pending', 'under_review', 'appeal_review'])),
+                const SizedBox(height: 14),
                 Wrap(
                   spacing: 16,
                   runSpacing: 16,
@@ -238,8 +241,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   ],
                 ),
                 const SizedBox(height: 24),
-                _caption('PERMITS AND STICKERS'),
-                const SizedBox(height: 10),
+                _caption('Permits and stickers', Icons.badge_outlined, _sum(['preparing', 'ready', 'plate_changes', 'replacements'])),
+                const SizedBox(height: 14),
                 Wrap(
                   spacing: 16,
                   runSpacing: 16,
@@ -251,8 +254,8 @@ class _DashboardPageState extends State<DashboardPage> {
                   ],
                 ),
                 const SizedBox(height: 24),
-                _caption('SUPPORT'),
-                const SizedBox(height: 10),
+                _caption('Support', Icons.support_agent_outlined, _sum(['tickets'])),
+                const SizedBox(height: 14),
                 Wrap(
                   spacing: 16,
                   runSpacing: 16,
@@ -297,6 +300,107 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         );
       },
+    );
+  }
+}
+
+/// One number on the dashboard. Lifts a little when the mouse is over it.
+class _StatCard extends StatefulWidget {
+  const _StatCard({
+    required this.label,
+    required this.count,
+    required this.loading,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final bool loading;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  State<_StatCard> createState() => _StatCardState();
+}
+
+class _StatCardState extends State<_StatCard> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = widget.count > 0;
+    final c = widget.color;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          transform: Matrix4.translationValues(0, _hover ? -3 : 0, 0),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: active ? c.withValues(alpha: 0.6) : (_hover ? AppColors.navy.withValues(alpha: 0.4) : AppColors.border)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1D3E7C).withValues(alpha: _hover ? 0.12 : 0.05),
+                blurRadius: _hover ? 18 : 10,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(width: 5, color: active ? c : AppColors.inputFill),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: c.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(13),
+                          ),
+                          child: Icon(widget.icon, color: c),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.loading ? '-' : '${widget.count}',
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w800,
+                                  color: active ? c : AppColors.textDark,
+                                ),
+                              ),
+                              Text(widget.label, style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.arrow_forward_ios_rounded, size: 14, color: _hover ? AppColors.navy : AppColors.textHint),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
