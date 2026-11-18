@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../admin_service.dart';
 import '../ui.dart';
 import 'common.dart';
+import 'review_widgets.dart';
+import 'ticket_page.dart';
 
 class SupportPage extends StatefulWidget {
   const SupportPage({super.key, this.initialFilter});
@@ -17,7 +19,6 @@ class _SupportPageState extends State<SupportPage> {
   List<Map<String, dynamic>> _rows = [];
   bool _loading = true;
   String? _error;
-  String? _busyId;
 
   static const Map<String, String> _filters = {
     'open': 'Open',
@@ -53,84 +54,30 @@ class _SupportPageState extends State<SupportPage> {
     }
   }
 
-  Future<void> _reply(Map<String, dynamic> t) async {
-    final ctrl = TextEditingController(text: str(t['reply']));
-    final text = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Reply to ${str(t['ticket_no'])}'),
-        content: SizedBox(
-          width: 520,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(str(t['subject']), style: const TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 6),
-              Text(str(t['message']), style: const TextStyle(color: AppColors.textMuted)),
-              const SizedBox(height: 14),
-              TextField(
-                controller: ctrl,
-                maxLines: 6,
-                maxLength: 1000,
-                decoration: const InputDecoration(
-                  hintText: 'Write your reply. The applicant will see it in their notifications.',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Send reply'),
-          ),
-        ],
-      ),
-    );
-    if (text == null || text.isEmpty || !mounted) return;
-    setState(() => _busyId = str(t['id']));
-    final err = await AdminService.replyTicket(str(t['id']), text);
-    if (!mounted) return;
-    setState(() => _busyId = null);
-    showSnack(context, err ?? 'Reply sent. The applicant was notified.');
-    _load();
-  }
-
-  Future<void> _close(Map<String, dynamic> t) async {
-    final ok = await confirmDialog(
+  Future<void> _open(List<Map<String, dynamic>> rows, int index) async {
+    // Open messages work as a queue: the next one opens after you reply.
+    final t = rows[index];
+    final queue = t['status'] == 'open' ? _rows.where((x) => x['status'] == 'open').toList() : [t];
+    final start = queue.indexWhere((x) => x['id'] == t['id']);
+    await Navigator.push(
       context,
-      title: 'Close this ticket?',
-      message: 'Close ${str(t['ticket_no'])} when the concern is resolved.',
-      action: 'Close ticket',
+      MaterialPageRoute(builder: (_) => TicketPage(queue: queue, index: start < 0 ? 0 : start)),
     );
-    if (!ok || !mounted) return;
-    setState(() => _busyId = str(t['id']));
-    final err = await AdminService.closeTicket(str(t['id']));
-    if (!mounted) return;
-    setState(() => _busyId = null);
-    showSnack(context, err ?? 'Ticket closed.');
     _load();
   }
 
-  Widget _statusPill(String s) {
-    switch (s) {
-      case 'answered':
-        return const Pill('Answered', bg: AppColors.successLight, fg: AppColors.success, border: AppColors.success);
-      case 'closed':
-        return const Pill('Closed');
-      default:
-        return const Pill('Open', bg: AppColors.goldLight, fg: AppColors.goldDark, border: AppColors.gold);
-    }
-  }
+  Widget _statusPill(String s) => switch (s) {
+        'answered' => statePill('Answered', 'success'),
+        'closed' => statePill('Closed', 'gray'),
+        _ => statePill('Open', 'warning'),
+      };
 
-  Widget _row(Map<String, dynamic> t) {
+  Widget _row(List<Map<String, dynamic>> rows, int i) {
+    final t = rows[i];
     final u = asOne(t['user']);
-    final busy = _busyId == str(t['id']);
-    final closed = t['status'] == 'closed';
     final hasReply = str(t['reply']).isNotEmpty;
     return RowCard(
+      onTap: () => _open(rows, i),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -148,43 +95,20 @@ class _SupportPageState extends State<SupportPage> {
           const SizedBox(height: 10),
           Text(str(t['subject']), style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.textDark)),
           const SizedBox(height: 4),
-          SelectableText(str(t['message']), style: const TextStyle(color: AppColors.textMuted)),
+          Text(
+            str(t['message']),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: AppColors.textMuted),
+          ),
           if (hasReply) ...[
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.inputFill,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Your reply  |  ${fmtDate(t['replied_at'])}',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.navy)),
-                  const SizedBox(height: 4),
-                  Text(str(t['reply'])),
-                ],
-              ),
-            ),
-          ],
-          if (!closed) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
+            const SizedBox(height: 8),
+            Row(
               children: [
-                FilledButton.icon(
-                  onPressed: busy ? null : () => _reply(t),
-                  icon: const Icon(Icons.reply, size: 18),
-                  label: Text(hasReply ? 'Edit reply' : 'Reply'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: busy ? null : () => _close(t),
-                  icon: const Icon(Icons.done_all, size: 18),
-                  label: const Text('Close ticket'),
-                ),
+                const Icon(Icons.reply, size: 16, color: AppColors.success),
+                const SizedBox(width: 6),
+                Text('Replied ${fmtDate(t['replied_at'])}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.success)),
               ],
             ),
           ],
@@ -205,7 +129,7 @@ class _SupportPageState extends State<SupportPage> {
       loading: _loading,
       error: _error,
       emptyText: 'No messages here.',
-      children: [for (final t in rows) _row(t)],
+      children: [for (var i = 0; i < rows.length; i++) _row(rows, i)],
     );
   }
 }

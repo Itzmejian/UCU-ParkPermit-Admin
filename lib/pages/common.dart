@@ -78,7 +78,11 @@ class ListPageFrame extends StatelessWidget {
     this.actions = const [],
     this.icon,
     this.subtitle,
+    this.top,
   });
+
+  /// Optional block between the filters and the list (for example totals).
+  final Widget? top;
 
   final String title;
   final Map<String, String> filters;
@@ -177,6 +181,10 @@ class ListPageFrame extends StatelessWidget {
             ),
             const SizedBox(height: 14),
           ],
+          if (top != null && !loading && error == null) ...[
+            top!,
+            const SizedBox(height: 14),
+          ],
           Expanded(child: body),
         ],
       ),
@@ -185,9 +193,12 @@ class ListPageFrame extends StatelessWidget {
 }
 
 class RowCard extends StatefulWidget {
-  const RowCard({super.key, required this.child});
+  const RowCard({super.key, required this.child, this.onTap});
 
   final Widget child;
+
+  /// Opens the item. The whole card becomes clickable.
+  final VoidCallback? onTap;
 
   @override
   State<RowCard> createState() => _RowCardState();
@@ -198,7 +209,8 @@ class _RowCardState extends State<RowCard> {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
+    final card = MouseRegion(
+      cursor: widget.onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: AnimatedContainer(
@@ -216,9 +228,19 @@ class _RowCardState extends State<RowCard> {
             ),
           ],
         ),
-        child: widget.child,
+        child: widget.onTap == null
+            ? widget.child
+            : Row(
+                children: [
+                  Expanded(child: widget.child),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.chevron_right, color: AppColors.textHint),
+                ],
+              ),
       ),
     );
+    if (widget.onTap == null) return card;
+    return GestureDetector(onTap: widget.onTap, behavior: HitTestBehavior.opaque, child: card);
   }
 }
 

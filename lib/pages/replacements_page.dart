@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../admin_service.dart';
 import '../ui.dart';
 import 'common.dart';
+import 'replacement_review_page.dart';
+import 'review_widgets.dart';
 
 class ReplacementsPage extends StatefulWidget {
   const ReplacementsPage({super.key, this.initialFilter});
@@ -17,7 +19,6 @@ class _ReplacementsPageState extends State<ReplacementsPage> {
   List<Map<String, dynamic>> _rows = [];
   bool _loading = true;
   String? _error;
-  String? _busyId;
 
   static const Map<String, String> _filters = {
     'requested': 'Waiting',
@@ -53,88 +54,43 @@ class _ReplacementsPageState extends State<ReplacementsPage> {
     }
   }
 
-  Future<void> _decide(Map<String, dynamic> r, bool approve) async {
-    final permit = asOne(r['permit']);
-    final ok = await confirmDialog(
+  Future<void> _open(List<Map<String, dynamic>> rows, int index) async {
+    // Waiting requests open as a queue, so the next one follows after a decision.
+    final r = rows[index];
+    final queue = r['status'] == 'requested'
+        ? _rows.where((x) => x['status'] == 'requested').toList()
+        : [r];
+    final start = queue.indexWhere((x) => x['id'] == r['id']);
+    await Navigator.push(
       context,
-      title: approve ? 'Approve the replacement?' : 'Reject the replacement?',
-      message: approve
-          ? 'A new sticker for ${str(permit['permit_no'])} will be prepared, and the applicant will be notified.'
-          : 'The applicant will be asked to visit the Security Office for details.',
-      action: approve ? 'Approve' : 'Reject',
-      color: approve ? AppColors.success : AppColors.error,
+      MaterialPageRoute(builder: (_) => ReplacementReviewPage(queue: queue, index: start < 0 ? 0 : start)),
     );
-    if (!ok || !mounted) return;
-    setState(() => _busyId = str(r['id']));
-    final err = await AdminService.replacementDecision(str(r['id']), approve);
-    if (!mounted) return;
-    setState(() => _busyId = null);
-    showSnack(context, err ?? 'Done. The applicant was notified.');
     _load();
   }
 
-  Widget _statusPill(String s) {
-    switch (s) {
-      case 'approved':
-        return const Pill('Approved', bg: AppColors.successLight, fg: AppColors.success, border: AppColors.success);
-      case 'rejected':
-        return const Pill('Rejected', bg: AppColors.errorLight, fg: AppColors.error, border: AppColors.error);
-      default:
-        return const Pill('Waiting', bg: AppColors.goldLight, fg: AppColors.goldDark, border: AppColors.gold);
-    }
-  }
+  Widget _statusPill(String s) => switch (s) {
+        'approved' => statePill('Approved', 'success'),
+        'rejected' => statePill('Rejected', 'error'),
+        _ => statePill('Waiting', 'warning'),
+      };
 
-  Widget _row(Map<String, dynamic> r) {
+  Widget _row(List<Map<String, dynamic>> rows, int i) {
+    final r = rows[i];
     final permit = asOne(r['permit']);
     final v = asOne(permit['vehicle']);
     final o = asOne(r['owner']);
-    final busy = _busyId == str(r['id']);
-    final waiting = r['status'] == 'requested';
     return RowCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      onTap: () => _open(rows, i),
+      child: Wrap(
+        spacing: 24,
+        runSpacing: 12,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Wrap(
-            spacing: 24,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              infoCol(str(permit['permit_no']), fmtDate(r['created_at']), mono: true),
-              infoCol(str(o['full_name']), '${roleLabel(o['role'])}  |  ${str(o['id_number'])}'),
-              infoCol(str(v['plate_number']), str(v['make_model']), mono: true),
-              _statusPill(str(r['status'])),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text('Reason: ${str(r['reason'])}', style: const TextStyle(fontWeight: FontWeight.w700)),
-          if (str(r['details']).isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(str(r['details']), style: const TextStyle(color: AppColors.textMuted)),
-            ),
-          if (waiting) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              children: [
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(backgroundColor: AppColors.success),
-                  onPressed: busy ? null : () => _decide(r, true),
-                  icon: const Icon(Icons.check, size: 18),
-                  label: const Text('Approve'),
-                ),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.error,
-                    side: const BorderSide(color: AppColors.error),
-                  ),
-                  onPressed: busy ? null : () => _decide(r, false),
-                  icon: const Icon(Icons.close, size: 18),
-                  label: const Text('Reject'),
-                ),
-              ],
-            ),
-          ],
+          infoCol(str(permit['permit_no']), fmtDate(r['created_at']), mono: true),
+          infoCol(str(o['full_name']), '${roleLabel(o['role'])}  |  ${str(o['id_number'])}'),
+          infoCol(str(v['plate_number']), str(v['make_model']), mono: true),
+          infoCol(str(r['reason']), 'Reason', width: 200),
+          _statusPill(str(r['status'])),
         ],
       ),
     );
@@ -152,7 +108,7 @@ class _ReplacementsPageState extends State<ReplacementsPage> {
       loading: _loading,
       error: _error,
       emptyText: 'No replacement requests.',
-      children: [for (final r in rows) _row(r)],
+      children: [for (var i = 0; i < rows.length; i++) _row(rows, i)],
     );
   }
 }

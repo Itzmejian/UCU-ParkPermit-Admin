@@ -243,6 +243,22 @@ class AdminService {
     return list.isEmpty ? null : list.first['file_path']?.toString();
   }
 
+  /// The newest OR/CR row (path, file name, size, date) for this vehicle, or null.
+  static Future<Map<String, dynamic>?> latestOrcr(String vehicleId) async {
+    final apps = await _c.from('applications').select('id').eq('vehicle_id', vehicleId);
+    final ids = [for (final a in List<Map<String, dynamic>>.from(apps)) a['id']];
+    if (ids.isEmpty) return null;
+    final docs = await _c
+        .from('documents')
+        .select('file_path, file_name, size_bytes, created_at')
+        .inFilter('application_id', ids)
+        .eq('kind', 'orcr')
+        .order('created_at', ascending: false)
+        .limit(1);
+    final list = List<Map<String, dynamic>>.from(docs);
+    return list.isEmpty ? null : list.first;
+  }
+
   static Future<String?> verifyVehicle(String vehicleId) => _run(() async {
         await _c.rpc('admin_verify_vehicle', params: {'p_vehicle_id': vehicleId});
       });

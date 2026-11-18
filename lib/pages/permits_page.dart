@@ -127,11 +127,26 @@ Future<void> _changeValidity(Map<String, dynamic> r) async {
       ),
     );
     if (result == null || !mounted) return;
+    final when = fmtDate(
+      '${result.date.year.toString().padLeft(4, '0')}-${result.date.month.toString().padLeft(2, '0')}-${result.date.day.toString().padLeft(2, '0')}',
+      time: false,
+    );
+    final ending = result.date.isBefore(_today);
+    final sure = await confirmDialog(
+      context,
+      title: ending ? 'End this permit now?' : 'Change the expiry date?',
+      message: ending
+          ? '${str(r['permit_no'])} will stop working at the gate right away. The applicant will be notified.'
+          : '${str(r['permit_no'])} will be valid until $when. The applicant will be notified.',
+      action: ending ? 'Yes, end permit' : 'Yes, save',
+      color: ending ? AppColors.error : AppColors.navy,
+    );
+    if (!sure || !mounted) return;
     setState(() => _busyId = id);
     final err = await AdminService.setValidity(id, result.date, result.reason);
     if (!mounted) return;
     setState(() => _busyId = null);
-    showSnack(context, err ?? 'Validity changed. It was recorded and the applicant was notified.');
+    showSnack(context, err ?? 'Expiry date saved. The change was recorded and the applicant was notified.');
     _load();
   }
 
@@ -198,10 +213,14 @@ Future<void> _changeValidity(Map<String, dynamic> r) async {
             ],
           ),
           ?action,
-          OutlinedButton.icon(
-            onPressed: busy ? null : () => _changeValidity(r),
-            icon: const Icon(Icons.event_outlined, size: 18),
-            label: const Text('Change validity'),
+          Tooltip(
+            message: 'Change the date this permit expires. Use it to extend a permit\n'
+                '(for example, late enrollment) or to end it early (for example, a violation).',
+            child: OutlinedButton.icon(
+              onPressed: busy ? null : () => _changeValidity(r),
+              icon: const Icon(Icons.edit_calendar_outlined, size: 18),
+              label: const Text('Edit expiry date'),
+            ),
           ),
           OutlinedButton.icon(
             onPressed: () => Navigator.push(
@@ -315,10 +334,11 @@ class _ValidityDialogState extends State<_ValidityDialog> {
     final quick = <(String, DateTime)>[
       ('+1 month', DateTime(_base.year, _base.month + 1, _base.day)),
       ('+6 months', DateTime(_base.year, _base.month + 6, _base.day)),
-      ('Expire now', _today.subtract(const Duration(days: 1))),
+      ('+1 year', DateTime(_base.year + 1, _base.month, _base.day)),
+      ('End now', _today.subtract(const Duration(days: 1))),
     ];
     return AlertDialog(
-      title: Text('Change validity of ${widget.permitNo}'),
+      title: Text('Edit expiry date: ${widget.permitNo}'),
       content: SizedBox(
         width: 540,
         child: SingleChildScrollView(
@@ -326,9 +346,25 @@ class _ValidityDialogState extends State<_ValidityDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.inputFill,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: const Text(
+                  'A permit is normally valid for one year. Change the date only when needed: '
+                  'extend it (for example, late enrollment or an office delay) or end it early '
+                  '(for example, a violation or the applicant left UCU).',
+                  style: TextStyle(height: 1.4, color: AppColors.navy),
+                ),
+              ),
+              const SizedBox(height: 12),
               Text(
                 'Currently valid until ${widget.current == null ? '-' : _fmt(widget.current!)}.',
-                style: const TextStyle(color: AppColors.textMuted),
+                style: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 14),
               Wrap(
