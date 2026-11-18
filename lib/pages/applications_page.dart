@@ -79,27 +79,21 @@ class _ApplicationsPageState extends State<ApplicationsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            spacing: 16,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              const PageTitle('Applications'),
-              SizedBox(
-                width: searchWidth(context),
-                child: TextField(
-                  onChanged: (v) => setState(() => _query = v),
-                  decoration: const InputDecoration(
-                    hintText: 'Search reference, plate, name or ID',
-                    prefixIcon: Icon(Icons.search),
-                    isDense: true,
-                  ),
-                ),
+          PageHeader(
+            title: 'Applications',
+            subtitle: 'Review new and renewal permit applications.',
+            icon: Icons.assignment_outlined,
+            count: _loading || _error != null ? null : rows.length,
+            actions: [
+              headerSearch(
+                context,
+                onChanged: (v) => setState(() => _query = v),
+                hint: 'Search reference, plate, name or ID',
               ),
-              IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: _load),
+              headerRefresh(_load),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Wrap(
             spacing: 8,
             runSpacing: 8,

@@ -37,11 +37,13 @@ ThemeData buildAdminTheme() {
     ),
     scaffoldBackgroundColor: AppColors.surface,
     appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.white,
-      foregroundColor: AppColors.navy,
+      backgroundColor: AppColors.navy,
+      foregroundColor: Colors.white,
       elevation: 0,
-      scrolledUnderElevation: 0.5,
-      titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy),
+      scrolledUnderElevation: 0,
+      titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white),
+      iconTheme: IconThemeData(color: Colors.white),
+      actionsIconTheme: IconThemeData(color: Colors.white),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -234,53 +236,239 @@ Widget docStatusPill(dynamic status) {
   }
 }
 
+/// Picks an icon for a section from its title.
+IconData sectionIcon(String title) {
+  final t = title.toLowerCase();
+  const map = <String, IconData>{
+    'decline': Icons.cancel_outlined,
+    'decision': Icons.gavel_outlined,
+    'applicant': Icons.person_outline,
+    'profile': Icons.person_outline,
+    'vehicle': Icons.directions_car_outlined,
+    'document': Icons.description_outlined,
+    'appeal': Icons.forum_outlined,
+    'permit': Icons.badge_outlined,
+    'application': Icons.assignment_outlined,
+    'password': Icons.lock_outline,
+    'email': Icons.mail_outline,
+    'account': Icons.manage_accounts_outlined,
+    'action': Icons.bolt_outlined,
+    'history': Icons.history,
+    'sticker': Icons.qr_code_2,
+    'scan': Icons.qr_code_scanner,
+    'change': Icons.edit_note,
+  };
+  for (final e in map.entries) {
+    if (t.contains(e.key)) return e.value;
+  }
+  return Icons.info_outline;
+}
+
 class SectionCard extends StatelessWidget {
   const SectionCard({
     super.key,
     required this.title,
     required this.children,
     this.trailing,
+    this.icon,
   });
 
   final String title;
   final List<Widget> children;
   final Widget? trailing;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
+        boxShadow: const [BoxShadow(color: Color(0x0D1D3E7C), blurRadius: 12, offset: Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title.toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.8,
-                    color: AppColors.goldDark,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 14, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(10)),
+                  child: Icon(icon ?? sectionIcon(title), size: 18, color: AppColors.navy),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.navy),
                   ),
                 ),
-              ),
-              ?trailing,
-            ],
+                ?trailing,
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-          ...children,
+          const Divider(height: 1, color: AppColors.inputFill),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+          ),
         ],
       ),
     );
   }
+}
+
+/// Navy banner at the top of a page, same look as the sidebar.
+class PageHeader extends StatelessWidget {
+  const PageHeader({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.icon = Icons.dashboard_outlined,
+    this.count,
+    this.actions = const [],
+  });
+
+  final String title;
+  final String? subtitle;
+  final IconData icon;
+  final int? count;
+
+  /// Search boxes and buttons shown on the right (below on phones).
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final head = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(13)),
+          child: Icon(icon, color: AppColors.navy, size: 24),
+        ),
+        const SizedBox(width: 14),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white),
+                    ),
+                  ),
+                  if (count != null) ...[
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '$count',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(subtitle!, style: const TextStyle(fontSize: 13, color: AppColors.blueSoft)),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+    return Container(
+      width: double.infinity,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.navy, AppColors.navyDark],
+        ),
+        boxShadow: const [BoxShadow(color: Color(0x261D3E7C), blurRadius: 16, offset: Offset(0, 6))],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
+            child: LayoutBuilder(
+              builder: (context, c) {
+                if (actions.isEmpty) return Align(alignment: Alignment.centerLeft, child: head);
+                if (c.maxWidth < 760) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      head,
+                      const SizedBox(height: 12),
+                      Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: actions),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: head),
+                    const SizedBox(width: 12),
+                    Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: actions),
+                  ],
+                );
+              },
+            ),
+          ),
+          Container(height: 4, color: AppColors.gold),
+        ],
+      ),
+    );
+  }
+}
+
+/// A search box that sits inside the navy page header.
+Widget headerSearch(BuildContext context, {required ValueChanged<String> onChanged, String hint = 'Search'}) {
+  return SizedBox(
+    width: searchWidth(context),
+    child: TextField(
+      onChanged: onChanged,
+      style: const TextStyle(color: AppColors.textDark),
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon: const Icon(Icons.search),
+        isDense: true,
+        fillColor: Colors.white,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    ),
+  );
+}
+
+/// A round refresh button for the navy page header.
+Widget headerRefresh(VoidCallback onPressed) {
+  return IconButton(
+    tooltip: 'Refresh',
+    onPressed: onPressed,
+    style: IconButton.styleFrom(backgroundColor: Colors.white.withValues(alpha: 0.14)),
+    icon: const Icon(Icons.refresh, color: Colors.white),
+  );
 }
 
 /// Less space around pages on phones.
@@ -339,26 +527,14 @@ class InfoRow extends StatelessWidget {
 }
 
 class PageTitle extends StatelessWidget {
-  const PageTitle(this.text, {super.key, this.subtitle});
+  const PageTitle(this.text, {super.key, this.subtitle, this.icon});
 
   final String text;
   final String? subtitle;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
-    final title = Text(
-      text,
-      style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.navy),
-    );
-    if (subtitle == null) return title;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        title,
-        const SizedBox(height: 2),
-        Text(subtitle!, style: const TextStyle(fontSize: 14, color: AppColors.textMuted)),
-      ],
-    );
+    return PageHeader(title: text, subtitle: subtitle, icon: icon ?? Icons.description_outlined);
   }
 }

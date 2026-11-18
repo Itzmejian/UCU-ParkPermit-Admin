@@ -283,6 +283,7 @@ class _GuardsPageState extends State<GuardsPage> {
       searchHint: 'Search name, email, ID or mobile',
       actions: [
         FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: AppColors.gold, foregroundColor: AppColors.navy),
           onPressed: _invite,
           icon: const Icon(Icons.person_add_alt_1, size: 18),
           label: const Text('Invite guard'),

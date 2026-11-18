@@ -164,7 +164,7 @@ class _AccountPageState extends State<AccountPage> {
     return ListView(
       padding: EdgeInsets.all(pagePadding(context)),
       children: [
-        const PageTitle('My account', subtitle: 'Your Security Office login. Keep your email and password private.'),
+        const PageTitle('My account', icon: Icons.manage_accounts_outlined, subtitle: 'Your Security Office login. Keep your email and password private.'),
         const SizedBox(height: 16),
         SectionCard(
           title: 'Account',

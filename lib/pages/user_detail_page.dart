@@ -167,6 +167,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 PageTitle(
+                  icon: Icons.person_outline,
                   str(u['full_name']).isEmpty ? '(no name yet)' : str(u['full_name']),
                   subtitle: '${roleLabel(u['role'])}  |  ${str(u['email'])}',
                 ),

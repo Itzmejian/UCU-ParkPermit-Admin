@@ -200,6 +200,10 @@ class _StickerPageState extends State<StickerPage> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.navy,
+        titleTextStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.navy),
+        iconTheme: const IconThemeData(color: AppColors.navy),
         title: const Text('Permit sticker'),
         actions: [
           OutlinedButton.icon(
