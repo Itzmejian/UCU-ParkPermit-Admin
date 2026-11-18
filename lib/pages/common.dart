@@ -161,7 +161,6 @@ class ListPageFrame extends StatelessWidget {
             count: loading || error != null ? null : children.length,
             actions: [
               if (onSearch != null) headerSearch(context, onChanged: onSearch!, hint: searchHint ?? 'Search'),
-              headerRefresh(onRefresh),
               ...actions,
             ],
           ),

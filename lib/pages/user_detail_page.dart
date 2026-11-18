@@ -297,10 +297,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('User details'),
-        actions: [
-          IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: _load),
-          const SizedBox(width: 8),
-        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

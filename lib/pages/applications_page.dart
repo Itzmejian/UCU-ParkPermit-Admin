@@ -90,7 +90,6 @@ class _ApplicationsPageState extends State<ApplicationsPage> {
                 onChanged: (v) => setState(() => _query = v),
                 hint: 'Search reference, plate, name or ID',
               ),
-              headerRefresh(_load),
             ],
           ),
           const SizedBox(height: 16),

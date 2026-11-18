@@ -381,10 +381,6 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Review application', style: TextStyle(fontWeight: FontWeight.w800)),
-        actions: [
-          IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh), onPressed: _load),
-          const SizedBox(width: 8),
-        ],
       ),
       body: _loading && _app == null
           ? const Center(child: CircularProgressIndicator())
