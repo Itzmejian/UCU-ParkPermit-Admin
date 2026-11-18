@@ -108,6 +108,19 @@ class AdminService {
     return Map<String, dynamic>.from(row);
   }
 
+  /// The oldest application still waiting for a decision, other than [exceptId].
+  static Future<String?> nextWaiting(String exceptId) async {
+    final rows = await _c
+        .from('applications')
+        .select('id')
+        .inFilter('status', ['pending', 'under_review', 'appeal_review'])
+        .neq('id', exceptId)
+        .order('submitted_at', ascending: true)
+        .limit(1);
+    final list = List<Map<String, dynamic>>.from(rows);
+    return list.isEmpty ? null : list.first['id']?.toString();
+  }
+
   static Future<List<Map<String, dynamic>>> zones(String vehicleType) async {
     final rows = await _c
         .from('parking_zones')

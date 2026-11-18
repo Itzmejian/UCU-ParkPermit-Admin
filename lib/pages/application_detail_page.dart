@@ -1,5 +1,7 @@
+import 'dart:ui_web' as ui_web;
+
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:web/web.dart' as web;
 import '../admin_service.dart';
 import '../ui.dart';
 
@@ -16,6 +18,7 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
   Map<String, dynamic>? _app;
   bool _loading = true;
   bool _busy = false;
+  bool _askedToStart = false;
   String? _error;
 
   @override
@@ -36,6 +39,10 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
         _app = a;
         _loading = false;
       });
+      if (str(a['status']) == 'pending' && !_askedToStart) {
+        _askedToStart = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _askStartReview());
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -49,13 +56,42 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
   }
 
+  /// Opening a new application asks right away whether to start the review.
+  Future<void> _askStartReview() async {
+    if (!mounted || _app == null) return;
+    final start = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _StartReviewDialog(app: _app!),
+    );
+    if (start == true) _startReview();
+  }
+
   Future<void> _startReview() async {
     setState(() => _busy = true);
     final err = await AdminService.startReview(widget.id);
     if (!mounted) return;
     setState(() => _busy = false);
-    _snack(err ?? 'Marked as under review. The applicant was notified.');
+    _snack(err ?? 'Review started. The applicant now sees "Under review" in the app.');
     _load();
+  }
+
+  /// After a decision, open the next application that is still waiting.
+  Future<void> _goNext(String message) async {
+    String? next;
+    try {
+      next = await AdminService.nextWaiting(widget.id);
+    } catch (_) {}
+    if (!mounted) return;
+    if (next == null) {
+      _snack('$message No more applications are waiting.');
+      Navigator.pop(context, true);
+      return;
+    }
+    _snack('$message Opening the next application.');
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => ApplicationDetailPage(id: next!)),
+    );
   }
 
   Future<void> _approve() async {
@@ -74,8 +110,12 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
     final r = await AdminService.approve(widget.id, zone.isEmpty ? null : zone);
     if (!mounted) return;
     setState(() => _busy = false);
-    _snack(r.error ?? 'Approved. Permit ${r.permitNo} was issued and the applicant was notified.');
-    _load();
+    if (r.error != null) {
+      _snack(r.error!);
+      _load();
+      return;
+    }
+    _goNext('Approved. Permit ${r.permitNo} was issued.');
   }
 
   Future<void> _decline() async {
@@ -91,61 +131,98 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
     final err = await AdminService.decline(widget.id, result.flags, result.note);
     if (!mounted) return;
     setState(() => _busy = false);
-    _snack(err ?? 'Declined. The applicant was notified and can file an appeal.');
-    _load();
-  }
-
-  Future<void> _openDoc(Map<String, dynamic> d) async {
-    try {
-      final url = await AdminService.documentUrl(str(d['file_path']));
-      await launchUrl(Uri.parse(url), webOnlyWindowName: '_blank');
-    } catch (_) {
-      _snack('Could not open the file.');
+    if (err != null) {
+      _snack(err);
+      _load();
+      return;
     }
+    _goNext('Declined. The applicant can file an appeal.');
   }
 
-  Widget _actions(Map<String, dynamic> a) {
+  // ---------- right side: decision ----------
+
+  Widget _decisionCard(Map<String, dynamic> a) {
     final status = str(a['status']);
-    if (!const ['pending', 'under_review', 'appeal_review'].contains(status)) {
-      return const SizedBox.shrink();
+    final waiting = const ['pending', 'under_review', 'appeal_review'].contains(status);
+    if (!waiting) {
+      final approved = status == 'approved';
+      return SectionCard(
+        title: 'Result',
+        icon: approved ? Icons.verified_outlined : Icons.cancel_outlined,
+        children: [
+          Row(
+            children: [
+              statusPill(status),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  approved
+                      ? 'Approved on ${fmtDate(a['reviewed_at'])}.'
+                      : 'Declined on ${fmtDate(a['declined_at'] ?? a['reviewed_at'])}.',
+                  style: const TextStyle(color: AppColors.textMuted),
+                ),
+              ),
+            ],
+          ),
+          if (status == 'declined' && str(a['officer_note']).isNotEmpty) ...[
+            const SizedBox(height: 10),
+            InfoRow('Note to applicant', str(a['officer_note'])),
+          ],
+        ],
+      );
     }
     final text = switch (status) {
-      'pending' => 'New application. Start the review, or decide right away.',
+      'pending' => 'This application is not under review yet. Start the review so the applicant sees "Under review" in the app.',
       'appeal_review' => 'The applicant appealed and uploaded new files. Check them, then decide.',
-      _ => 'Check the documents against the details, then approve or decline.',
+      _ => 'Under review. Check the documents against the details, then approve or decline.',
     };
     return SectionCard(
       title: 'Your decision',
       children: [
         Text(text, style: const TextStyle(color: AppColors.textMuted)),
         const SizedBox(height: 14),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            if (status == 'pending')
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _startReview,
-                icon: const Icon(Icons.manage_search),
-                label: const Text('Start Review'),
+        if (status == 'pending')
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.navy,
+                padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(backgroundColor: AppColors.success),
-              onPressed: _busy ? null : _approve,
-              icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Approve'),
+              onPressed: _busy ? null : _startReview,
+              icon: const Icon(Icons.manage_search),
+              label: const Text('Start review'),
             ),
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.error,
-                side: const BorderSide(color: AppColors.error),
+          )
+        else
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  onPressed: _busy ? null : _approve,
+                  icon: const Icon(Icons.check_circle_outline),
+                  label: const Text('Approve'),
+                ),
               ),
-              onPressed: _busy ? null : _decline,
-              icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Decline'),
-            ),
-          ],
-        ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: const BorderSide(color: AppColors.error),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  onPressed: _busy ? null : _decline,
+                  icon: const Icon(Icons.cancel_outlined),
+                  label: const Text('Decline'),
+                ),
+              ),
+            ],
+          ),
         if (_busy)
           const Padding(
             padding: EdgeInsets.only(top: 12),
@@ -155,63 +232,23 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
     );
   }
 
-  Widget _docRow(Map<String, dynamic> d) {
-    final isPdf = str(d['file_name']).toLowerCase().endsWith('.pdf');
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(isPdf ? Icons.picture_as_pdf_outlined : Icons.image_outlined, color: AppColors.navy),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(kDocLabels[str(d['kind'])] ?? str(d['kind']),
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-                    docStatusPill(d['review_status']),
-                    if (d['appeal_id'] != null) const Pill('Sent with appeal'),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text('${str(d['file_name'])}  |  ${fmtSize(d['size_bytes'])}  |  ${fmtDate(d['created_at'])}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textHint)),
-                if (str(d['reviewer_remark']).isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text('Remark: ${str(d['reviewer_remark'])}',
-                        style: const TextStyle(fontSize: 12.5, color: AppColors.error)),
-                  ),
-              ],
-            ),
-          ),
-          TextButton.icon(
-            onPressed: () => _openDoc(d),
-            icon: const Icon(Icons.open_in_new, size: 18),
-            label: const Text('Open'),
-          ),
-        ],
-      ),
+  Widget _documents(List<Map<String, dynamic>> docs) {
+    return SectionCard(
+      title: 'Documents',
+      children: [
+        if (docs.isEmpty)
+          const Text('No documents.', style: TextStyle(color: AppColors.textMuted))
+        else
+          for (final d in docs) _DocPreview(key: ValueKey(str(d['id'])), doc: d),
+      ],
     );
   }
 
-  Widget _content(Map<String, dynamic> a) {
+  // ---------- left side: details ----------
+
+  List<Widget> _details(Map<String, dynamic> a) {
     final p = asOne(a['applicant']);
     final v = asOne(a['vehicle']);
-    final docs = asMany(a['documents'])
-      ..sort((x, y) => str(x['created_at']).compareTo(str(y['created_at'])));
     final appeal = asOne(a['appeals']);
     final permit = asOne(a['permits']);
     final isStudent = p['role'] != 'employee';
@@ -219,113 +256,123 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
         .map(str)
         .where((x) => x.trim().isNotEmpty)
         .join(', ');
-
-    return ListView(
-      padding: EdgeInsets.all(pagePadding(context)),
-      children: [
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 980),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    SelectableText(str(a['reference_no']),
-                        style: const TextStyle(
-                            fontFamily: 'monospace', fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.navy)),
-                    statusPill(a['status']),
-                    Pill(a['kind'] == 'renewal' ? 'Renewal' : 'New application'),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text('Submitted ${fmtDate(a['submitted_at'])}'
-                    '${a['reviewed_at'] == null ? '' : '  |  Reviewed ${fmtDate(a['reviewed_at'])}'}',
-                    style: const TextStyle(color: AppColors.textHint)),
-                const SizedBox(height: 16),
-                _actions(a),
-                if (a['status'] == 'declined') ...[
-                  SectionCard(
-                    title: 'Declined',
-                    children: [
-                      InfoRow('Declined on', fmtDate(a['declined_at'])),
-                      InfoRow('Note to applicant', str(a['officer_note'])),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 16),
-                SectionCard(
-                  title: 'Applicant',
-                  children: [
-                    InfoRow('Name', str(p['full_name'])),
-                    InfoRow('Email', str(p['email'])),
-                    InfoRow('User type', roleLabel(p['role'])),
-                    InfoRow(isStudent ? 'Student ID' : 'Employee ID', str(p['id_number']), mono: true),
-                    if (isStudent) ...[
-                      InfoRow('Course', str(p['program'])),
-                      InfoRow('Year level', str(p['year_level'])),
-                    ] else ...[
-                      InfoRow('Employee type', str(p['employee_type'])),
-                      InfoRow('Department / Office', str(p['department'])),
-                    ],
-                    InfoRow('Birthday', fmtDate(p['birthday'], time: false)),
-                    InfoRow('Mobile', str(p['phone']).isEmpty ? '' : '+63 ${str(p['phone'])}'),
-                    InfoRow('Address', address),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                SectionCard(
-                  title: 'Vehicle',
-                  children: [
-                    InfoRow('Type', vehicleLabel(v['vehicle_type'])),
-                    InfoRow('Plate number', str(v['plate_number']), mono: true),
-                    InfoRow('Make / Model', str(v['make_model'])),
-                    InfoRow('Color', str(v['color'])),
-                    InfoRow('Model year', str(v['model_year'])),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                SectionCard(
-                  title: 'Documents',
-                  children: [
-                    if (docs.isEmpty)
-                      const Text('No documents.', style: TextStyle(color: AppColors.textMuted))
-                    else
-                      for (final d in docs) _docRow(d),
-                  ],
-                ),
-                if (appeal.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  SectionCard(
-                    title: 'Appeal',
-                    children: [
-                      InfoRow('Ticket', str(appeal['ticket_no']), mono: true),
-                      InfoRow('Filed on', fmtDate(appeal['created_at'])),
-                      InfoRow('Status', str(appeal['status']).replaceAll('_', ' ')),
-                      InfoRow('Statement', str(appeal['statement'])),
-                    ],
-                  ),
-                ],
-                if (permit.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  SectionCard(
-                    title: 'Permit',
-                    children: [
-                      InfoRow('Permit number', str(permit['permit_no']), mono: true),
-                      InfoRow('Sticker', str(permit['sticker_status'])),
-                      InfoRow('Valid from', fmtDate(permit['valid_from'], time: false)),
-                      InfoRow('Valid until', fmtDate(permit['valid_until'], time: false)),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
+    return [
+      Wrap(
+        spacing: 10,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SelectableText(str(a['reference_no']),
+              style: const TextStyle(
+                  fontFamily: 'monospace', fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.navy)),
+          Pill(a['kind'] == 'renewal' ? 'Renewal' : 'New application'),
+        ],
+      ),
+      const SizedBox(height: 4),
+      Text('Submitted ${fmtDate(a['submitted_at'])}'
+          '${a['reviewed_at'] == null ? '' : '  |  Reviewed ${fmtDate(a['reviewed_at'])}'}',
+          style: const TextStyle(color: AppColors.textHint)),
+      const SizedBox(height: 16),
+      SectionCard(
+        title: 'Applicant',
+        children: [
+          InfoRow('Name', str(p['full_name'])),
+          InfoRow('Email', str(p['email'])),
+          InfoRow('User type', roleLabel(p['role'])),
+          InfoRow(isStudent ? 'Student ID' : 'Employee ID', str(p['id_number']), mono: true),
+          if (isStudent) ...[
+            InfoRow('Course', str(p['program'])),
+            InfoRow('Year level', str(p['year_level'])),
+          ] else ...[
+            InfoRow('Employee type', str(p['employee_type'])),
+            InfoRow('Department / Office', str(p['department'])),
+          ],
+          InfoRow('Birthday', fmtDate(p['birthday'], time: false)),
+          InfoRow('Mobile', str(p['phone']).isEmpty ? '' : '+63 ${str(p['phone'])}'),
+          InfoRow('Address', address),
+        ],
+      ),
+      const SizedBox(height: 16),
+      SectionCard(
+        title: 'Vehicle',
+        children: [
+          InfoRow('Type', vehicleLabel(v['vehicle_type'])),
+          InfoRow('Plate number', str(v['plate_number']), mono: true),
+          InfoRow('Make / Model', str(v['make_model'])),
+          InfoRow('Color', str(v['color'])),
+          InfoRow('Model year', str(v['model_year'])),
+        ],
+      ),
+      if (appeal.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        SectionCard(
+          title: 'Appeal',
+          children: [
+            InfoRow('Ticket', str(appeal['ticket_no']), mono: true),
+            InfoRow('Filed on', fmtDate(appeal['created_at'])),
+            InfoRow('Status', str(appeal['status']).replaceAll('_', ' ')),
+            InfoRow('Statement', str(appeal['statement'])),
+          ],
         ),
       ],
+      if (permit.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        SectionCard(
+          title: 'Permit',
+          children: [
+            InfoRow('Permit number', str(permit['permit_no']), mono: true),
+            InfoRow('Sticker', str(permit['sticker_status'])),
+            InfoRow('Valid from', fmtDate(permit['valid_from'], time: false)),
+            InfoRow('Valid until', fmtDate(permit['valid_until'], time: false)),
+          ],
+        ),
+      ],
+    ];
+  }
+
+  Widget _content(Map<String, dynamic> a) {
+    final docs = asMany(a['documents'])
+      ..sort((x, y) => str(x['created_at']).compareTo(str(y['created_at'])));
+    final pad = pagePadding(context);
+    return LayoutBuilder(
+      builder: (context, c) {
+        if (c.maxWidth < 1000) {
+          return ListView(
+            padding: EdgeInsets.all(pad),
+            children: [
+              ..._details(a).take(3),
+              _decisionCard(a),
+              const SizedBox(height: 16),
+              ..._details(a).skip(3),
+              const SizedBox(height: 16),
+              _documents(docs),
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 5,
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(pad, pad, pad / 2, pad),
+                children: _details(a),
+              ),
+            ),
+            Expanded(
+              flex: 6,
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(pad / 2, pad, pad, pad),
+                children: [
+                  _decisionCard(a),
+                  const SizedBox(height: 16),
+                  _documents(docs),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -339,7 +386,7 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
           const SizedBox(width: 8),
         ],
       ),
-      body: _loading
+      body: _loading && _app == null
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(
@@ -355,6 +402,270 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
               : _content(_app!),
     );
   }
+}
+
+/// Shown when a new application is opened: start the review now?
+class _StartReviewDialog extends StatelessWidget {
+  const _StartReviewDialog({required this.app});
+
+  final Map<String, dynamic> app;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = asOne(app['applicant']);
+    final v = asOne(app['vehicle']);
+    return Dialog(
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              color: AppColors.navy,
+              padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+              child: const Row(
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: AppColors.gold,
+                    child: Icon(Icons.manage_search, color: AppColors.navy),
+                  ),
+                  SizedBox(width: 14),
+                  Expanded(
+                    child: Text('Start the review?',
+                        style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
+                  ),
+                ],
+              ),
+            ),
+            Container(height: 4, color: AppColors.gold),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(str(app['reference_no']),
+                      style: const TextStyle(
+                          fontFamily: 'monospace', fontWeight: FontWeight.w800, color: AppColors.navy, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text('${str(p['full_name'])}  |  ${str(v['plate_number'])}',
+                      style: const TextStyle(color: AppColors.textMuted)),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'The status will change to "Under review" and the applicant will see it in the app right away.',
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Not now')),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(backgroundColor: AppColors.navy),
+                    onPressed: () => Navigator.pop(context, true),
+                    icon: const Icon(Icons.play_arrow_rounded),
+                    label: const Text('Start review'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One document, shown right on the page (picture or PDF), no new tab.
+class _DocPreview extends StatefulWidget {
+  const _DocPreview({super.key, required this.doc});
+
+  final Map<String, dynamic> doc;
+
+  @override
+  State<_DocPreview> createState() => _DocPreviewState();
+}
+
+class _DocPreviewState extends State<_DocPreview> {
+  late final Future<String> _url = AdminService.documentUrl(str(widget.doc['file_path']));
+
+  bool get _isPdf => str(widget.doc['file_name']).toLowerCase().endsWith('.pdf');
+
+  Widget _viewer(String url, {required bool large}) {
+    if (_isPdf) return _PdfFrame(url: url);
+    final img = Image.network(
+      url,
+      fit: BoxFit.contain,
+      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
+      loadingBuilder: (context, child, p) =>
+          p == null ? child : const Center(child: CircularProgressIndicator()),
+      errorBuilder: (context, e, s) => const Center(
+        child: Text('Could not load the picture.', style: TextStyle(color: AppColors.error)),
+      ),
+    );
+    return large ? InteractiveViewer(maxScale: 5, child: img) : img;
+  }
+
+  void _enlarge(String url) {
+    final size = MediaQuery.sizeOf(context);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(24),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: size.width * 0.9,
+          height: size.height * 0.88,
+          child: Column(
+            children: [
+              Container(
+                color: AppColors.navy,
+                padding: const EdgeInsets.fromLTRB(18, 8, 8, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(kDocLabels[str(widget.doc['kind'])] ?? str(widget.doc['kind']),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                    ),
+                    if (!_isPdf)
+                      const Text('Scroll to zoom', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(child: Container(color: const Color(0xFFF1F3F8), child: _viewer(url, large: true))),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.doc;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: FutureBuilder<String>(
+        future: _url,
+        builder: (context, snap) {
+          final url = snap.data;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
+                child: Row(
+                  children: [
+                    Icon(_isPdf ? Icons.picture_as_pdf_outlined : Icons.image_outlined, color: AppColors.navy),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(kDocLabels[str(d['kind'])] ?? str(d['kind']),
+                                  style: const TextStyle(fontWeight: FontWeight.w700)),
+                              docStatusPill(d['review_status']),
+                              if (d['appeal_id'] != null) const Pill('Sent with appeal'),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text('${str(d['file_name'])}  |  ${fmtSize(d['size_bytes'])}  |  ${fmtDate(d['created_at'])}',
+                              style: const TextStyle(fontSize: 12, color: AppColors.textHint)),
+                        ],
+                      ),
+                    ),
+                    if (url != null)
+                      TextButton.icon(
+                        onPressed: () => _enlarge(url),
+                        icon: const Icon(Icons.zoom_out_map, size: 18),
+                        label: const Text('Enlarge'),
+                      ),
+                  ],
+                ),
+              ),
+              if (str(d['reviewer_remark']).isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                  child: Text('Remark: ${str(d['reviewer_remark'])}',
+                      style: const TextStyle(fontSize: 12.5, color: AppColors.error)),
+                ),
+              Container(
+                height: 360,
+                color: const Color(0xFFF1F3F8),
+                child: snap.hasError
+                    ? const Center(
+                        child: Text('Could not load the file.', style: TextStyle(color: AppColors.error)),
+                      )
+                    : url == null
+                        ? const Center(child: CircularProgressIndicator())
+                        : GestureDetector(
+                            onTap: _isPdf ? null : () => _enlarge(url),
+                            child: MouseRegion(
+                              cursor: _isPdf ? MouseCursor.defer : SystemMouseCursors.zoomIn,
+                              child: _viewer(url, large: false),
+                            ),
+                          ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Shows a PDF inside the page with the browser's own PDF viewer.
+class _PdfFrame extends StatefulWidget {
+  const _PdfFrame({required this.url});
+
+  final String url;
+
+  @override
+  State<_PdfFrame> createState() => _PdfFrameState();
+}
+
+class _PdfFrameState extends State<_PdfFrame> {
+  static int _next = 0;
+  late final String _viewType = 'pdf-frame-${_next++}';
+
+  @override
+  void initState() {
+    super.initState();
+    ui_web.platformViewRegistry.registerViewFactory(_viewType, (int id) {
+      final frame = web.HTMLIFrameElement()
+        ..src = widget.url
+        ..style.border = '0'
+        ..style.width = '100%'
+        ..style.height = '100%';
+      return frame;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => HtmlElementView(viewType: _viewType);
 }
 
 /// Approve: choose the parking zone. Returns the zone code, '' for the
