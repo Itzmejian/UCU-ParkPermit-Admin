@@ -8,35 +8,31 @@ Future<bool> confirmDialog(
   required String action,
   Color color = AppColors.navy,
 }) async {
-  final danger = color == AppColors.error;
+  final tone = color == AppColors.error
+      ? 'danger'
+      : (color == AppColors.success ? 'success' : 'info');
+  final icon = switch (tone) {
+    'danger' => Icons.warning_amber_rounded,
+    'success' => Icons.check_circle_outline,
+    _ => Icons.help_outline,
+  };
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      icon: Container(
-        width: 52,
-        height: 52,
-        decoration: BoxDecoration(
-          color: danger ? AppColors.errorLight : AppColors.inputFill,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          danger ? Icons.warning_amber_rounded : Icons.help_outline,
-          color: danger ? AppColors.error : AppColors.navy,
-          size: 28,
-        ),
-      ),
-      title: Text(title, textAlign: TextAlign.center),
+      titlePadding: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      title: DialogHeader(icon: icon, title: title, tone: tone),
       content: SizedBox(
-        width: 440,
-        child: Text(message, textAlign: TextAlign.center, style: const TextStyle(height: 1.45, color: AppColors.textMuted)),
+        width: 460,
+        child: Text(message, style: const TextStyle(height: 1.5, fontSize: 14.5, color: AppColors.textDark)),
       ),
-      actionsAlignment: MainAxisAlignment.center,
       actions: [
         OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-        FilledButton(
+        FilledButton.icon(
           style: FilledButton.styleFrom(backgroundColor: color),
           onPressed: () => Navigator.pop(ctx, true),
-          child: Text(action),
+          icon: Icon(tone == 'danger' ? Icons.delete_outline : Icons.check, size: 18),
+          label: Text(action),
         ),
       ],
     ),
@@ -44,8 +40,34 @@ Future<bool> confirmDialog(
   return ok == true;
 }
 
+/// A short message at the bottom of the screen, with an icon.
 void showSnack(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  final lower = message.toLowerCase();
+  final bad = lower.contains('could not') ||
+      lower.contains('error') ||
+      lower.contains('failed') ||
+      lower.contains('not allowed') ||
+      lower.contains('already') ||
+      lower.contains('refresh the page') ||
+      lower.contains('try again');
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.hideCurrentSnackBar();
+  messenger.showSnackBar(
+    SnackBar(
+      backgroundColor: bad ? const Color(0xFF8E1F1F) : AppColors.navyDark,
+      duration: Duration(seconds: bad ? 6 : 4),
+      showCloseIcon: true,
+      closeIconColor: Colors.white70,
+      content: Row(
+        children: [
+          Icon(bad ? Icons.error_outline : Icons.check_circle_outline,
+              color: bad ? Colors.white : AppColors.gold, size: 20),
+          const SizedBox(width: 12),
+          Expanded(child: Text(message)),
+        ],
+      ),
+    ),
+  );
 }
 
 /// Icon and one-line description for each list page.

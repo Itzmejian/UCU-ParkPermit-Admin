@@ -338,7 +338,9 @@ class _ScheduleDialogState extends State<_ScheduleDialog> {
   Widget build(BuildContext context) {
     final date = DateTime.now().add(Duration(days: _days));
     return AlertDialog(
-      title: const Text('Schedule removal'),
+      titlePadding: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      title: const DialogHeader(icon: Icons.event_busy_outlined, title: 'Schedule removal', subtitle: 'The account will be removed on the chosen date', tone: 'warning'),
       content: SizedBox(
         width: 480,
         child: Column(
@@ -415,7 +417,9 @@ class _DeleteDialogState extends State<_DeleteDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Delete permanently?'),
+      titlePadding: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      title: const DialogHeader(icon: Icons.delete_forever_outlined, title: 'Delete permanently?', subtitle: 'This cannot be undone', tone: 'danger'),
       content: SizedBox(
         width: 480,
         child: Column(

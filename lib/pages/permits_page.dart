@@ -338,7 +338,9 @@ class _ValidityDialogState extends State<_ValidityDialog> {
       ('End now', _today.subtract(const Duration(days: 1))),
     ];
     return AlertDialog(
-      title: Text('Edit expiry date: ${widget.permitNo}'),
+      titlePadding: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      title: DialogHeader(icon: Icons.edit_calendar_outlined, title: 'Edit expiry date', subtitle: widget.permitNo),
       content: SizedBox(
         width: 540,
         child: SingleChildScrollView(

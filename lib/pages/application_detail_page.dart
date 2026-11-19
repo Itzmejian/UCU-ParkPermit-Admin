@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 import '../admin_service.dart';
 import '../ui.dart';
+import 'common.dart';
 
 class ApplicationDetailPage extends StatefulWidget {
   const ApplicationDetailPage({super.key, required this.id});
@@ -52,18 +53,23 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
     }
   }
 
-  void _snack(String m) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-  }
+  void _snack(String m) => showSnack(context, m);
 
   /// Opening a new application asks right away whether to start the review.
   Future<void> _askStartReview() async {
     if (!mounted || _app == null) return;
     final start = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => _StartReviewDialog(app: _app!),
     );
-    if (start == true) _startReview();
+    if (!mounted) return;
+    if (start == true) {
+      _startReview();
+    } else {
+      // "Not now": go back to the list of applications.
+      Navigator.pop(context);
+    }
   }
 
   Future<void> _startReview() async {
@@ -687,7 +693,9 @@ class _ApproveDialogState extends State<_ApproveDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Approve application'),
+      titlePadding: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      title: const DialogHeader(icon: Icons.verified_outlined, title: 'Approve application', subtitle: 'Choose the parking zone for this vehicle', tone: 'success'),
       content: SizedBox(
         width: 460,
         child: Column(
@@ -792,7 +800,9 @@ class _DeclineDialogState extends State<_DeclineDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Decline application'),
+      titlePadding: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      title: const DialogHeader(icon: Icons.cancel_outlined, title: 'Decline application', subtitle: 'Mark the documents that need to be fixed', tone: 'danger'),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(

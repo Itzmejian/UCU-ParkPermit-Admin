@@ -83,13 +83,14 @@ class _ScanLogPageState extends State<ScanLogPage> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.qr_code_scanner, color: AppColors.navy),
-            const SizedBox(width: 10),
-            const Expanded(child: Text('Gate scan')),
-            _resultPill(result),
-          ],
+        titlePadding: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        title: DialogHeader(
+          icon: Icons.qr_code_scanner,
+          title: 'Gate scan',
+          subtitle: fmtDate(s['created_at']),
+          tone: result == 'valid' ? 'success' : 'danger',
+          trailing: _resultPill(result),
         ),
         content: SizedBox(
           width: 480,

@@ -204,7 +204,9 @@ class _ShellPageState extends State<ShellPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Log out?'),
+        titlePadding: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        title: const DialogHeader(icon: Icons.logout, title: 'Log out?', subtitle: 'You will need to log in again to continue'),
         content: const Text('You will need to log in again.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),

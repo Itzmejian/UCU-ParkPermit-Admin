@@ -89,13 +89,21 @@ ThemeData buildAdminTheme() {
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 12,
+      barrierColor: const Color(0x8C0B1A3A),
+      actionsPadding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       titleTextStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.navy),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: AppColors.navy,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      backgroundColor: AppColors.navyDark,
+      elevation: 6,
+      insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+      contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+      actionTextColor: AppColors.gold,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
     dividerTheme: const DividerThemeData(color: AppColors.border),
   );
@@ -536,5 +544,76 @@ class PageTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PageHeader(title: text, subtitle: subtitle, icon: icon ?? Icons.description_outlined);
+  }
+}
+
+
+/// Navy header for every pop-up: icon, title, optional line under it and a
+/// gold strip. Use it as the `title` of an AlertDialog with
+/// `titlePadding: EdgeInsets.zero` and `clipBehavior: Clip.antiAlias`.
+class DialogHeader extends StatelessWidget {
+  const DialogHeader({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.tone = 'info',
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+
+  /// info (gold icon), success (green), danger (red) or warning.
+  final String tone;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final (bg, fg) = switch (tone) {
+      'success' => (AppColors.successLight, AppColors.success),
+      'danger' => (AppColors.errorLight, AppColors.error),
+      'warning' => (AppColors.goldLight, AppColors.goldDark),
+      _ => (AppColors.gold, AppColors.navy),
+    };
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          color: AppColors.navy,
+          padding: const EdgeInsets.fromLTRB(22, 20, 18, 18),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+                child: Icon(icon, color: fg, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontSize: 18.5, fontWeight: FontWeight.w800, color: Colors.white),
+                    ),
+                    if (subtitle != null && subtitle!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(subtitle!, style: const TextStyle(fontSize: 13, color: AppColors.blueSoft)),
+                    ],
+                  ],
+                ),
+              ),
+              if (trailing != null) ...[const SizedBox(width: 10), trailing!],
+            ],
+          ),
+        ),
+        Container(height: 4, color: tone == 'danger' ? AppColors.error : AppColors.gold),
+      ],
+    );
   }
 }

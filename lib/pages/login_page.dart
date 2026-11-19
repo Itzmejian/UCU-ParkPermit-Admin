@@ -495,17 +495,9 @@ class _ForgotDialogState extends State<_ForgotDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'STEP ${_step + 1} OF 3',
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: AppColors.textHint),
-          ),
-          const SizedBox(height: 4),
-          Text(_title),
-        ],
-      ),
+      titlePadding: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      title: DialogHeader(icon: Icons.lock_reset, title: _title, subtitle: 'Step ${_step + 1} of 3'),
       content: SizedBox(
         width: 420,
         child: Column(

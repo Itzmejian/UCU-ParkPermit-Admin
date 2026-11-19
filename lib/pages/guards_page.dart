@@ -148,7 +148,9 @@ class _GuardsPageState extends State<GuardsPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) {
           return AlertDialog(
-            title: const Text('Delete this guard?'),
+            titlePadding: EdgeInsets.zero,
+            clipBehavior: Clip.antiAlias,
+            title: const DialogHeader(icon: Icons.person_remove_outlined, title: 'Delete this guard?', subtitle: 'The guard account will be removed for good', tone: 'danger'),
             content: SizedBox(
               width: 440,
               child: Column(

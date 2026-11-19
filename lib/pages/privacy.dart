@@ -18,13 +18,9 @@ Future<void> showPrivacyDialog(BuildContext context, {bool requireAck = false}) 
     context: context,
     barrierDismissible: !requireAck,
     builder: (ctx) => AlertDialog(
-      title: const Row(
-        children: [
-          Icon(Icons.privacy_tip_outlined, color: AppColors.ucuGreen),
-          SizedBox(width: 10),
-          Expanded(child: Text('Data Privacy Commitment')),
-        ],
-      ),
+      titlePadding: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      title: const DialogHeader(icon: Icons.privacy_tip_outlined, title: 'Data Privacy Commitment', subtitle: 'Republic Act No. 10173'),
       content: const SizedBox(
         width: 520,
         child: Column(
