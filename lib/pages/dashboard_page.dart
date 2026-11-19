@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../admin_service.dart';
 import '../ui.dart';
-import 'application_detail_page.dart';
+import 'start_review.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key, required this.onOpen});
@@ -65,11 +65,8 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Future<void> _openApp(String id) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => ApplicationDetailPage(id: id)),
-    );
-    _load();
+    final opened = await openApplication(context, id);
+    if (opened && mounted) _load();
   }
 
   /// Opens the oldest application that still needs a decision.

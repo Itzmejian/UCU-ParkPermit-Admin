@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Everything the admin website reads and does. Every action is a database
@@ -9,12 +10,18 @@ class AdminService {
 
   static String? get email => _c.auth.currentUser?.email;
 
+  /// Goes up by one after every change the admin makes, so the menu badges
+  /// and open lists can update without a refresh button.
+  static final ValueNotifier<int> changes = ValueNotifier<int>(0);
+
+  static void _changed() => changes.value++;
+
   static String friendly(Object e) {
     final m = e is PostgrestException ? e.message : e.toString();
     if (m.contains('NOT_ADMIN')) return 'Your account is not allowed to do this.';
-    if (m.contains('WRONG_STATUS')) return 'This was already changed. Refresh the page.';
+    if (m.contains('WRONG_STATUS')) return 'Someone already changed this record. Go back and open it again.';
     if (m.contains('NOTHING_FLAGGED')) return 'Flag at least one document or write a note.';
-    if (m.contains('NOT_FOUND')) return 'Record not found. Refresh the page.';
+    if (m.contains('NOT_FOUND')) return 'This record no longer exists. Go back to the list.';
     if (m.contains('BAD_INPUT')) return 'Please check what you entered.';
     if (m.contains('PROTECTED_ACCOUNT')) return 'Admin and guard accounts cannot be removed here.';
     if (m.contains('HAS_STUDENT_DATA')) return 'This email belongs to a student or employee with vehicles. Use a different email.';
@@ -71,6 +78,7 @@ class AdminService {
   static Future<String?> _run(Future<void> Function() action) async {
     try {
       await action();
+      _changed();
       return null;
     } catch (e) {
       return friendly(e);
@@ -84,7 +92,7 @@ class AdminService {
   // ---------- applications ----------
 
   static const String _listCols =
-      'id, reference_no, kind, status, submitted_at, '
+      'id, reference_no, kind, status, submitted_at, appeals(status), '
       'vehicle:vehicles(plate_number, make_model, vehicle_type), '
       'applicant:profiles!applications_applicant_id_fkey(full_name, role, id_number)';
 
@@ -144,6 +152,7 @@ class AdminService {
         'p_app_id': appId,
         'p_zone_code': zoneCode,
       });
+      _changed();
       return (permitNo: r?.toString(), error: null);
     } catch (e) {
       return (permitNo: null, error: friendly(e));

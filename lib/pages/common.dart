@@ -49,6 +49,8 @@ void showSnack(BuildContext context, String message) {
       lower.contains('not allowed') ||
       lower.contains('already') ||
       lower.contains('refresh the page') ||
+      lower.contains('someone already') ||
+      lower.contains('no longer exists') ||
       lower.contains('try again');
   final messenger = ScaffoldMessenger.of(context);
   messenger.hideCurrentSnackBar();

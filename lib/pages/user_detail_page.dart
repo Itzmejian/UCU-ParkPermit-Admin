@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../admin_service.dart';
 import '../ui.dart';
-import 'application_detail_page.dart';
+import 'start_review.dart';
 import 'common.dart';
 import 'users_page.dart';
 
@@ -237,11 +237,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
                             child: InkWell(
                               borderRadius: BorderRadius.circular(14),
                               onTap: () async {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => ApplicationDetailPage(id: str(a['id']))),
-                                );
-                                _load();
+                                final opened = await openApplication(context, str(a['id']));
+                                if (opened && mounted) _load();
                               },
                               child: RowCard(
                                 child: Wrap(

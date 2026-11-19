@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../admin_service.dart';
 import '../ui.dart';
@@ -27,6 +29,7 @@ class _ShellPageState extends State<ShellPage> {
   final Map<int, String?> _filters = {};
   final Map<int, int> _keys = {};
   Map<String, int> _counts = {};
+  Timer? _timer;
 
   static const _dests = [
     ('Dashboard', Icons.dashboard_outlined, Icons.dashboard),
@@ -45,6 +48,10 @@ class _ShellPageState extends State<ShellPage> {
   void initState() {
     super.initState();
     _loadCounts();
+    // Menu badges update by themselves: after every change the admin makes,
+    // and every 45 seconds for new applications from the app.
+    AdminService.changes.addListener(_loadCounts);
+    _timer = Timer.periodic(const Duration(seconds: 45), (_) => _loadCounts());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !privacyAcknowledged()) showPrivacyDialog(context, requireAck: true);
     });
@@ -145,6 +152,13 @@ class _ShellPageState extends State<ShellPage> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    AdminService.changes.removeListener(_loadCounts);
+    super.dispose();
   }
 
   Future<void> _loadCounts() async {

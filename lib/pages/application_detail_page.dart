@@ -5,6 +5,7 @@ import 'package:web/web.dart' as web;
 import '../admin_service.dart';
 import '../ui.dart';
 import 'common.dart';
+import 'start_review.dart';
 
 class ApplicationDetailPage extends StatefulWidget {
   const ApplicationDetailPage({super.key, required this.id});
@@ -19,7 +20,6 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
   Map<String, dynamic>? _app;
   bool _loading = true;
   bool _busy = false;
-  bool _askedToStart = false;
   String? _error;
 
   @override
@@ -40,10 +40,6 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
         _app = a;
         _loading = false;
       });
-      if (_needsStart(a) && !_askedToStart) {
-        _askedToStart = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) => _askStartReview());
-      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -55,35 +51,9 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
 
   void _snack(String m) => showSnack(context, m);
 
-  /// True for a new application, or an appeal nobody has started yet.
-  bool _needsStart(Map<String, dynamic> a) {
-    final status = str(a['status']);
-    if (status == 'pending') return true;
-    if (status == 'appeal_review') {
-      final ap = asOne(a['appeals']);
-      return ap.isNotEmpty && str(ap['status']) == 'submitted';
-    }
-    return false;
-  }
+  bool _needsStart(Map<String, dynamic> a) => needsStartReview(a);
 
   bool _isAppeal(Map<String, dynamic> a) => str(a['status']) == 'appeal_review';
-
-  /// Opening a new application asks right away whether to start the review.
-  Future<void> _askStartReview() async {
-    if (!mounted || _app == null) return;
-    final start = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _StartReviewDialog(app: _app!),
-    );
-    if (!mounted) return;
-    if (start == true) {
-      _startReview();
-    } else {
-      // "Not now": go back to the list of applications.
-      Navigator.pop(context);
-    }
-  }
 
   Future<void> _startReview() async {
     setState(() => _busy = true);
@@ -99,6 +69,7 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
   }
 
   /// After a decision, open the next application that is still waiting.
+  /// A new one asks "Start the review?" first; "Not now" goes back to the list.
   Future<void> _goNext(String message) async {
     String? next;
     try {
@@ -110,11 +81,9 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
       Navigator.pop(context, true);
       return;
     }
-    _snack('$message Opening the next application.');
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => ApplicationDetailPage(id: next!)),
-    );
+    _snack('$message Next application is ready.');
+    final opened = await openApplication(context, next, replace: true);
+    if (!opened && mounted) Navigator.pop(context, true);
   }
 
   Future<void> _approve() async {
@@ -422,98 +391,6 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
                   ),
                 )
               : _content(_app!),
-    );
-  }
-}
-
-/// Shown when a new application is opened: start the review now?
-class _StartReviewDialog extends StatelessWidget {
-  const _StartReviewDialog({required this.app});
-
-  final Map<String, dynamic> app;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = asOne(app['applicant']);
-    final v = asOne(app['vehicle']);
-    final appeal = str(app['status']) == 'appeal_review';
-    final ticket = str(asOne(app['appeals'])['ticket_no']);
-    return Dialog(
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              color: AppColors.navy,
-              padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundColor: AppColors.gold,
-                    child: Icon(appeal ? Icons.gavel_outlined : Icons.manage_search, color: AppColors.navy),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(appeal ? 'Start the appeal review?' : 'Start the review?',
-                            style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 2),
-                        Text(appeal ? 'The applicant sent corrected documents' : 'New application waiting for review',
-                            style: const TextStyle(color: AppColors.blueSoft, fontSize: 13)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(height: 4, color: AppColors.gold),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(str(app['reference_no']),
-                      style: const TextStyle(
-                          fontFamily: 'monospace', fontWeight: FontWeight.w800, color: AppColors.navy, fontSize: 16)),
-                  const SizedBox(height: 4),
-                  Text('${str(p['full_name'])}  |  ${str(v['plate_number'])}'
-                      '${appeal && ticket.isNotEmpty ? '  |  Appeal $ticket' : ''}',
-                      style: const TextStyle(color: AppColors.textMuted)),
-                  const SizedBox(height: 14),
-                  Text(
-                    appeal
-                        ? 'The appeal will change to "Under review" and the applicant will see it in the app right away.'
-                        : 'The status will change to "Under review" and the applicant will see it in the app right away.',
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Not now')),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(backgroundColor: AppColors.navy),
-                    onPressed: () => Navigator.pop(context, true),
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    label: Text(appeal ? 'Start appeal review' : 'Start review'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

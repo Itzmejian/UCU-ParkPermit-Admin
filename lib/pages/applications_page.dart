@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../admin_service.dart';
 import '../ui.dart';
-import 'application_detail_page.dart';
+import 'start_review.dart';
 
 class ApplicationsPage extends StatefulWidget {
   const ApplicationsPage({super.key, this.initialStatus});
@@ -64,11 +64,8 @@ class _ApplicationsPageState extends State<ApplicationsPage> {
   }
 
   Future<void> _open(String id) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => ApplicationDetailPage(id: id)),
-    );
-    _load();
+    final opened = await openApplication(context, id);
+    if (opened && mounted) _load();
   }
 
   @override
@@ -184,7 +181,12 @@ class ApplicationRow extends StatelessWidget {
     final pills = Wrap(
       spacing: 6,
       runSpacing: 6,
-      children: [Pill(kind), statusPill(app['status'])],
+      children: [
+        Pill(kind),
+        statusPill(app['status']),
+        if (app['status'] == 'appeal_review' && needsStartReview(app))
+          const Pill('Not started', bg: AppColors.goldLight, fg: AppColors.goldDark, border: AppColors.gold),
+      ],
     );
 
     return Material(
