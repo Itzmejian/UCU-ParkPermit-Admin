@@ -40,7 +40,7 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
         _app = a;
         _loading = false;
       });
-      if (str(a['status']) == 'pending' && !_askedToStart) {
+      if (_needsStart(a) && !_askedToStart) {
         _askedToStart = true;
         WidgetsBinding.instance.addPostFrameCallback((_) => _askStartReview());
       }
@@ -54,6 +54,19 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
   }
 
   void _snack(String m) => showSnack(context, m);
+
+  /// True for a new application, or an appeal nobody has started yet.
+  bool _needsStart(Map<String, dynamic> a) {
+    final status = str(a['status']);
+    if (status == 'pending') return true;
+    if (status == 'appeal_review') {
+      final ap = asOne(a['appeals']);
+      return ap.isNotEmpty && str(ap['status']) == 'submitted';
+    }
+    return false;
+  }
+
+  bool _isAppeal(Map<String, dynamic> a) => str(a['status']) == 'appeal_review';
 
   /// Opening a new application asks right away whether to start the review.
   Future<void> _askStartReview() async {
@@ -77,7 +90,11 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
     final err = await AdminService.startReview(widget.id);
     if (!mounted) return;
     setState(() => _busy = false);
-    _snack(err ?? 'Review started. The applicant now sees "Under review" in the app.');
+    final appeal = _app != null && _isAppeal(_app!);
+    _snack(err ??
+        (appeal
+            ? 'Appeal review started. The applicant now sees "Appeal under review" in the app.'
+            : 'Review started. The applicant now sees "Under review" in the app.'));
     _load();
   }
 
@@ -177,9 +194,12 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
         ],
       );
     }
+    final needsStart = _needsStart(a);
     final text = switch (status) {
       'pending' => 'This application is not under review yet. Start the review so the applicant sees "Under review" in the app.',
-      'appeal_review' => 'The applicant appealed and uploaded new files. Check them, then decide.',
+      'appeal_review' when needsStart =>
+        'The applicant appealed and uploaded new files. Start the review so the applicant sees "Appeal under review" in the app.',
+      'appeal_review' => 'Appeal under review. Check the new files, then approve or decline.',
       _ => 'Under review. Check the documents against the details, then approve or decline.',
     };
     return SectionCard(
@@ -187,7 +207,7 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
       children: [
         Text(text, style: const TextStyle(color: AppColors.textMuted)),
         const SizedBox(height: 14),
-        if (status == 'pending')
+        if (needsStart)
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -197,7 +217,7 @@ class _ApplicationDetailPageState extends State<ApplicationDetailPage> {
               ),
               onPressed: _busy ? null : _startReview,
               icon: const Icon(Icons.manage_search),
-              label: const Text('Start review'),
+              label: Text(status == 'appeal_review' ? 'Start appeal review' : 'Start review'),
             ),
           )
         else
@@ -416,6 +436,8 @@ class _StartReviewDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = asOne(app['applicant']);
     final v = asOne(app['vehicle']);
+    final appeal = str(app['status']) == 'appeal_review';
+    final ticket = str(asOne(app['appeals'])['ticket_no']);
     return Dialog(
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
@@ -428,17 +450,25 @@ class _StartReviewDialog extends StatelessWidget {
             Container(
               color: AppColors.navy,
               padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
-              child: const Row(
+              child: Row(
                 children: [
                   CircleAvatar(
                     radius: 22,
                     backgroundColor: AppColors.gold,
-                    child: Icon(Icons.manage_search, color: AppColors.navy),
+                    child: Icon(appeal ? Icons.gavel_outlined : Icons.manage_search, color: AppColors.navy),
                   ),
-                  SizedBox(width: 14),
+                  const SizedBox(width: 14),
                   Expanded(
-                    child: Text('Start the review?',
-                        style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(appeal ? 'Start the appeal review?' : 'Start the review?',
+                            style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 2),
+                        Text(appeal ? 'The applicant sent corrected documents' : 'New application waiting for review',
+                            style: const TextStyle(color: AppColors.blueSoft, fontSize: 13)),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -453,11 +483,14 @@ class _StartReviewDialog extends StatelessWidget {
                       style: const TextStyle(
                           fontFamily: 'monospace', fontWeight: FontWeight.w800, color: AppColors.navy, fontSize: 16)),
                   const SizedBox(height: 4),
-                  Text('${str(p['full_name'])}  |  ${str(v['plate_number'])}',
+                  Text('${str(p['full_name'])}  |  ${str(v['plate_number'])}'
+                      '${appeal && ticket.isNotEmpty ? '  |  Appeal $ticket' : ''}',
                       style: const TextStyle(color: AppColors.textMuted)),
                   const SizedBox(height: 14),
-                  const Text(
-                    'The status will change to "Under review" and the applicant will see it in the app right away.',
+                  Text(
+                    appeal
+                        ? 'The appeal will change to "Under review" and the applicant will see it in the app right away.'
+                        : 'The status will change to "Under review" and the applicant will see it in the app right away.',
                   ),
                 ],
               ),
@@ -473,7 +506,7 @@ class _StartReviewDialog extends StatelessWidget {
                     style: FilledButton.styleFrom(backgroundColor: AppColors.navy),
                     onPressed: () => Navigator.pop(context, true),
                     icon: const Icon(Icons.play_arrow_rounded),
-                    label: const Text('Start review'),
+                    label: Text(appeal ? 'Start appeal review' : 'Start review'),
                   ),
                 ],
               ),
